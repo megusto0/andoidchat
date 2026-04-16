@@ -440,8 +440,8 @@ object ChatReducer {
             return makeChatDescriptor(ChatContextKind.SELF, emptyList())
         }
 
-        val participants = (listOf(sender) + targets)
-            .filter { it != currentUser }
+        val participants = (if (sender == "Server") targets else (listOf(sender) + targets))
+            .filter { it != currentUser && it != "Server" }
             .toSet()
 
         return if (participants.isEmpty()) {

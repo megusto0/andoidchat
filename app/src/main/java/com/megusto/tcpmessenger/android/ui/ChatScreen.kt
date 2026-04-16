@@ -42,6 +42,7 @@ import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -101,6 +102,7 @@ import com.megusto.tcpmessenger.android.ui.theme.InfoBlue
 import com.megusto.tcpmessenger.android.ui.theme.InputSurface
 import com.megusto.tcpmessenger.android.ui.theme.MainSurface
 import com.megusto.tcpmessenger.android.ui.theme.MessageSurface
+import com.megusto.tcpmessenger.android.ui.theme.ServerBubble
 import com.megusto.tcpmessenger.android.ui.theme.SidebarSurface
 import com.megusto.tcpmessenger.android.ui.theme.Success
 import com.megusto.tcpmessenger.android.ui.theme.TextMuted
@@ -257,9 +259,12 @@ fun ChatScreen(
 
                 ComposerArea(
                     chats = visibleChats,
+                    activeChat = activeChat,
                     activeChatId = activeChat?.id,
                     draft = draft,
                     canSend = canSendToCurrentTarget,
+                    groupMode = state.groupMode,
+                    selectedClients = state.selectedClients,
                     onDraftChange = { draft = it },
                     onSwitchChat = onSwitchChat,
                     onSend = {
@@ -818,6 +823,8 @@ private fun MessageBubble(
         }
 
         MessageType.OTHER -> {
+            val isServer = message.sender == "Server"
+            val bubbleColor = if (isServer) ServerBubble else ElevatedCard
             val shape = RoundedCornerShape(
                 topStart = if (isFirstInGroup) 4.dp else 4.dp,
                 topEnd = 16.dp,
@@ -835,14 +842,23 @@ private fun MessageBubble(
                                 .padding(top = 4.dp)
                                 .size(34.dp)
                                 .clip(CircleShape)
-                                .background(ElevatedCard),
+                                .background(if (isServer) ServerBubble else ElevatedCard),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = message.sender.firstOrNull()?.uppercase() ?: "?",
-                                color = TextPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                            if (isServer) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Settings,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = InfoBlue,
+                                )
+                            } else {
+                                Text(
+                                    text = message.sender.firstOrNull()?.uppercase() ?: "?",
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     } else {
                         Spacer(modifier = Modifier.width(34.dp))
@@ -851,20 +867,32 @@ private fun MessageBubble(
                     Surface(
                         modifier = Modifier.widthIn(max = 340.dp),
                         shape = shape,
-                        color = ElevatedCard,
+                        color = bubbleColor,
+                        border = if (isServer) BorderStroke(1.dp, InfoBlue.copy(alpha = 0.3f)) else null,
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             if (isFirstInGroup) {
-                                Text(
-                                    text = message.sender,
-                                    color = Accent.copy(alpha = 0.85f),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.2.sp,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isServer) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Settings,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = InfoBlue,
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = message.sender,
+                                        color = if (isServer) InfoBlue else Accent.copy(alpha = 0.85f),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.2.sp,
+                                    )
+                                }
                             }
                             Text(
                                 text = message.text,
@@ -913,14 +941,26 @@ private fun SystemBadge(
 @Composable
 private fun ComposerArea(
     chats: List<ChatContext>,
+    activeChat: ChatContext?,
     activeChatId: String?,
     draft: String,
     canSend: Boolean,
+    groupMode: GroupMode,
+    selectedClients: Set<String>,
     onDraftChange: (String) -> Unit,
     onSwitchChat: (String) -> Unit,
     onSend: () -> Unit,
 ) {
     val dividerColor = BorderSoft
+
+    val placeholderText = when {
+        !canSend -> "Выберите адресатов..."
+        activeChat?.kind == ChatContextKind.GENERAL -> "Сообщение в General..."
+        groupMode == GroupMode.CUSTOM && selectedClients.isNotEmpty() -> {
+            "Сообщение для: ${selectedClients.sorted().joinToString(", ")}..."
+        }
+        else -> "Введите сообщение..."
+    }
 
     Column(
         modifier = Modifier
@@ -974,7 +1014,7 @@ private fun ComposerArea(
                 maxLines = 5,
                 placeholder = {
                     Text(
-                        text = if (canSend) "Введите сообщение..." else "Выберите адресатов...",
+                        text = placeholderText,
                         color = TextMuted,
                     )
                 },
