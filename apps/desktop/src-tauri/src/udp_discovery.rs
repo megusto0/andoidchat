@@ -1,11 +1,17 @@
 //! UDP auto-discovery для TCP Messenger.
 //!
-//! Клиент отправляет broadcast-запрос в локальную сеть и получает
-//! TCP-порт сервера из первого корректного ответа.
+//! Desktop-клиент ищет сервер так же агрессивно, как Android:
+//! - global broadcast
+//! - directed broadcast по локальным интерфейсам
+//! - unicast fallback по адресам локальной подсети
 
+use std::collections::BTreeSet;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use if_addrs::{IfAddr, get_if_addrs};
 use serde::Serialize;
 use tokio::net::UdpSocket;
-use tokio::time::{timeout, Duration, Instant};
+use tokio::time::{Duration, Instant, timeout};
 
 const DISCOVERY_PORT: u16 = 54545;
 const DISCOVERY_REQUEST: &str = "TCP_MESSENGER_DISCOVER_V1";
@@ -36,6 +42,91 @@ fn parse_discovery_response(payload: &str, fallback_host: &str) -> Option<Discov
     })
 }
 
+fn collect_discovery_targets() -> Vec<SocketAddr> {
+    let mut targets = BTreeSet::new();
+
+    targets.insert(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
+        DISCOVERY_PORT,
+    ));
+    targets.insert(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        DISCOVERY_PORT,
+    ));
+
+    let interfaces = match get_if_addrs() {
+        Ok(interfaces) => interfaces,
+        Err(_) => return targets.into_iter().collect(),
+    };
+
+    for interface in interfaces {
+        if should_skip_interface(&interface.name) || interface.is_loopback() {
+            continue;
+        }
+
+        let IfAddr::V4(v4) = interface.addr else {
+            continue;
+        };
+
+        let ip = v4.ip;
+        let netmask = v4.netmask;
+
+        if ip.is_loopback() || ip.is_link_local() || ip.octets() == [0, 0, 0, 0] {
+            continue;
+        }
+
+        targets.insert(SocketAddr::new(IpAddr::V4(compute_broadcast(ip, netmask)), DISCOVERY_PORT));
+
+        for host in subnet_hosts(ip, netmask) {
+            targets.insert(SocketAddr::new(IpAddr::V4(host), DISCOVERY_PORT));
+        }
+    }
+
+    targets.into_iter().collect()
+}
+
+fn should_skip_interface(name: &str) -> bool {
+    let lowered = name.to_ascii_lowercase();
+    lowered.starts_with("docker")
+        || lowered.starts_with("br-")
+        || lowered.starts_with("veth")
+        || lowered.starts_with("virbr")
+}
+
+fn compute_broadcast(ip: Ipv4Addr, netmask: Ipv4Addr) -> Ipv4Addr {
+    Ipv4Addr::from(u32::from(ip) | !u32::from(netmask))
+}
+
+fn subnet_hosts(ip: Ipv4Addr, netmask: Ipv4Addr) -> Vec<Ipv4Addr> {
+    let prefix = u32::from(netmask).count_ones() as u8;
+    let effective_prefix = match prefix {
+        24..=30 => prefix,
+        _ => 24,
+    };
+
+    let host_bits = 32_u32.saturating_sub(effective_prefix as u32);
+    let host_count = ((1_u32 << host_bits).saturating_sub(2)).clamp(1, 254);
+    let mask = if effective_prefix == 0 {
+        0
+    } else {
+        u32::MAX << host_bits
+    };
+
+    let base = u32::from(ip) & mask;
+    let current = u32::from(ip);
+    let mut hosts = Vec::with_capacity(host_count as usize);
+
+    for offset in 1..=host_count {
+        let candidate = base + offset;
+        if candidate == current {
+            continue;
+        }
+        hosts.push(Ipv4Addr::from(candidate));
+    }
+
+    hosts
+}
+
 pub async fn discover_server(timeout_ms: u64) -> Result<Option<DiscoveryResult>, String> {
     let socket = UdpSocket::bind("0.0.0.0:0")
         .await
@@ -45,16 +136,11 @@ pub async fn discover_server(timeout_ms: u64) -> Result<Option<DiscoveryResult>,
         .set_broadcast(true)
         .map_err(|e| format!("Не удалось включить UDP broadcast: {}", e))?;
 
-    let targets = [
-        format!("255.255.255.255:{}", DISCOVERY_PORT),
-        format!("127.0.0.1:{}", DISCOVERY_PORT),
-    ];
-
-    for target in targets {
-        let _ = socket.send_to(DISCOVERY_REQUEST.as_bytes(), &target).await;
+    for target in collect_discovery_targets() {
+        let _ = socket.send_to(DISCOVERY_REQUEST.as_bytes(), target).await;
     }
 
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(200));
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(250));
     let mut buffer = [0_u8; 1024];
 
     loop {

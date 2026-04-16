@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use state::AppState;
 use tauri::Emitter;
-use tcp_client::{do_connect, ConnectResult};
+use tcp_client::{ConnectResult, do_connect};
 
 /// Подключается к серверу мессенджера.
 ///
@@ -138,15 +138,13 @@ async fn disconnect(
     Ok(())
 }
 
-/// Токен отмены для текущей симуляции.
-static SIM_CANCEL: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
-
 /// Запускает симуляцию нагрузочного тестирования.
 ///
 /// Вызывается из JS: `invoke("start_simulation", { host, port, count })`.
 #[tauri::command]
 async fn start_simulation(
     app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
     host: String,
     port: u16,
     count: Option<u16>,
@@ -154,11 +152,17 @@ async fn start_simulation(
     let n = count.unwrap_or(55);
     let cancel = Arc::new(AtomicBool::new(false));
 
-    let _ = SIM_CANCEL.set(cancel.clone());
+    {
+        let mut guard = state.simulation_cancel.lock().unwrap();
+        if let Some(previous) = guard.replace(cancel.clone()) {
+            previous.store(true, Ordering::SeqCst);
+        }
+    }
 
     let app_clone = app.clone();
+    let state_clone = state.inner().clone();
     tokio::spawn(async move {
-        let _ = simulator::run_simulation(app_clone, host, port, n, cancel).await;
+        let _ = simulator::run_simulation(app_clone, state_clone, host, port, n, cancel).await;
     });
 
     Ok(())
@@ -168,11 +172,21 @@ async fn start_simulation(
 ///
 /// Вызывается из JS: `invoke("stop_simulation")`.
 #[tauri::command]
-async fn stop_simulation() -> Result<(), String> {
-    if let Some(cancel) = SIM_CANCEL.get() {
+async fn stop_simulation(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    if let Some(cancel) = state.simulation_cancel.lock().unwrap().as_ref() {
         cancel.store(true, Ordering::SeqCst);
     }
     Ok(())
+}
+
+/// Возвращает последний snapshot метрик симуляции.
+#[tauri::command]
+async fn get_simulation_metrics(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<simulator::SimMetrics, String> {
+    Ok(state.get_simulation_metrics())
 }
 
 fn main() {
@@ -189,6 +203,7 @@ fn main() {
             disconnect,
             start_simulation,
             stop_simulation,
+            get_simulation_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("Ошибка запуска Tauri");

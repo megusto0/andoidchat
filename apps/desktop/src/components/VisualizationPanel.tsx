@@ -24,7 +24,7 @@ const PHASE_COLORS: Record<string, string> = {
 };
 
 export function VisualizationPanel({ onClose }: Props) {
-  const { metrics, running, start, stop, isDone, passed } = useSimulation();
+  const { metrics, running, start, stop, isDone } = useSimulation();
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("5000");
   const [count, setCount] = useState("55");
@@ -34,6 +34,32 @@ export function VisualizationPanel({ onClose }: Props) {
   }
 
   const phase = metrics.phase || "idle";
+  const requestedBots = Math.max(0, Number(count) || 0);
+  const connectedAll = requestedBots === 0 || metrics.totalConnected >= requestedBots;
+  const hasVerificationErrors = metrics.incorrectResponses > 0;
+  const hasConnectionErrors = metrics.failedConnections > 0;
+  const passedResult =
+    isDone &&
+    connectedAll &&
+    !hasConnectionErrors &&
+    !hasVerificationErrors;
+
+  const resultText = passedResult
+    ? `ПРОЙДЕН — подключено ${metrics.totalConnected}/${requestedBots || metrics.totalConnected}, ошибок проверки нет`
+    : [
+        `НЕ ПРОЙДЕН — подключено ${metrics.totalConnected}/${requestedBots || metrics.totalConnected}`,
+        hasConnectionErrors
+          ? `ошибок подключения: ${metrics.failedConnections}`
+          : null,
+        hasVerificationErrors
+          ? `ошибок проверки ответа: ${metrics.incorrectResponses}`
+          : null,
+        !connectedAll
+          ? `не все боты успели подключиться`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
 
   return (
     <aside className={s.panel}>
@@ -139,10 +165,8 @@ export function VisualizationPanel({ onClose }: Props) {
         )}
 
         {isDone && (
-          <div className={`${s.result} ${passed ? s.resultPass : s.resultFail}`}>
-            {passed
-              ? `ПРОЙДЕН — ${metrics.totalConnected} подключений, 0 ошибок`
-              : `НЕ ПРОЙДЕН — подключений: ${metrics.totalConnected}, некорректных: ${metrics.incorrectResponses}`}
+          <div className={`${s.result} ${passedResult ? s.resultPass : s.resultFail}`}>
+            {resultText}
           </div>
         )}
       </div>

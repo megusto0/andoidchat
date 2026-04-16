@@ -20,6 +20,8 @@ export interface SimMetrics {
   failedConnections: number;
   messagesSent: number;
   messagesReceived: number;
+  echoConfirmed: number;
+  serverResponsesConfirmed: number;
   incorrectResponses: number;
   avgResponseMs: number;
   messagesPerSecond: number;
@@ -34,6 +36,8 @@ const INITIAL_METRICS: SimMetrics = {
   failedConnections: 0,
   messagesSent: 0,
   messagesReceived: 0,
+  echoConfirmed: 0,
+  serverResponsesConfirmed: 0,
   incorrectResponses: 0,
   avgResponseMs: 0,
   messagesPerSecond: 0,
@@ -47,12 +51,32 @@ export function useSimulation() {
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function pullLatestMetrics() {
+      try {
+        const snapshot = await invoke<SimMetrics>("get_simulation_metrics");
+        if (!mounted) {
+          return;
+        }
+        setMetrics(snapshot);
+        setRunning(snapshot.phase !== "done" && snapshot.phase !== "idle");
+      } catch (_) {
+        /* ignore polling errors while backend boots */
+      }
+    }
+
     const unlisten = listen<SimMetrics>("simulation-metrics", (event) => {
       setMetrics(event.payload);
       setRunning(event.payload.phase !== "done" && event.payload.phase !== "idle");
     });
 
+    pullLatestMetrics();
+    const interval = window.setInterval(pullLatestMetrics, 300);
+
     return () => {
+      mounted = false;
+      window.clearInterval(interval);
       unlisten.then((fn) => fn());
     };
   }, []);

@@ -3,6 +3,7 @@
 //! Хранит канал отправки в TCP-сокет и флаг подключения.
 //! Доступно из всех Tauri-команд через `tauri::State`.
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -10,6 +11,7 @@ use std::sync::Mutex;
 use tokio::sync::mpsc;
 
 use crate::protocol::ServerPacket;
+use crate::simulator::SimMetrics;
 
 /// Общее состояние приложения.
 ///
@@ -22,6 +24,8 @@ pub struct AppState {
     pub latest_clients: Mutex<Vec<String>>,
     pub latest_client_platforms: Mutex<HashMap<String, String>>,
     pub packet_queue: Mutex<VecDeque<ServerPacket>>,
+    pub simulation_cancel: Mutex<Option<Arc<AtomicBool>>>,
+    pub latest_simulation_metrics: Mutex<SimMetrics>,
 }
 
 impl AppState {
@@ -33,6 +37,8 @@ impl AppState {
             latest_clients: Mutex::new(Vec::new()),
             latest_client_platforms: Mutex::new(HashMap::new()),
             packet_queue: Mutex::new(VecDeque::new()),
+            simulation_cancel: Mutex::new(None),
+            latest_simulation_metrics: Mutex::new(SimMetrics::default()),
         }
     }
 
@@ -62,5 +68,13 @@ impl AppState {
 
     pub fn drain_packets(&self) -> Vec<ServerPacket> {
         self.packet_queue.lock().unwrap().drain(..).collect()
+    }
+
+    pub fn set_simulation_metrics(&self, metrics: SimMetrics) {
+        *self.latest_simulation_metrics.lock().unwrap() = metrics;
+    }
+
+    pub fn get_simulation_metrics(&self) -> SimMetrics {
+        self.latest_simulation_metrics.lock().unwrap().clone()
     }
 }

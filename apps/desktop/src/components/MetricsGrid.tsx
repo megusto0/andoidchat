@@ -12,9 +12,21 @@ export function MetricsGrid({ metrics }: Props) {
     { label: "Активных клиентов", value: metrics.activeClients, good: true },
     { label: "Всего подключений", value: metrics.totalConnected, good: metrics.totalConnected >= 50 },
     { label: "Ошибок подключения", value: metrics.failedConnections, good: metrics.failedConnections === 0 },
-    { label: "Отправлено сообщений", value: metrics.messagesSent, good: true },
+    { label: "Отправлено ботами", value: metrics.messagesSent, good: true },
+    {
+      label: "Доставлено пакетов",
+      value: metrics.messagesReceived,
+      good: metrics.messagesReceived > 0 || metrics.messagesSent === 0,
+    },
+    { label: "Подтверждено эхо", value: metrics.echoConfirmed, good: true },
+    {
+      label: "Подтверждено ответов сервера",
+      value: metrics.serverResponsesConfirmed,
+      good: true,
+    },
+    { label: "Ошибок проверки", value: metrics.incorrectResponses, good: metrics.incorrectResponses === 0 },
     { label: "Среднее время ответа", value: `${metrics.avgResponseMs.toFixed(1)} мс`, good: !hasErrors },
-    { label: "Сообщений/сек", value: metrics.messagesPerSecond.toFixed(1), good: true },
+    { label: "Пакетов/сек", value: metrics.messagesPerSecond.toFixed(1), good: true },
   ];
 
   return (
