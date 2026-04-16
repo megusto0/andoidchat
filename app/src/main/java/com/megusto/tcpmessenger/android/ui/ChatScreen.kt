@@ -80,6 +80,7 @@ import com.megusto.tcpmessenger.android.data.MessageItem
 import com.megusto.tcpmessenger.android.data.MessageType
 import com.megusto.tcpmessenger.android.ui.theme.Accent
 import com.megusto.tcpmessenger.android.ui.theme.AccentMuted
+import com.megusto.tcpmessenger.android.ui.theme.AccentOnBubble
 import com.megusto.tcpmessenger.android.ui.theme.AppBackground
 import com.megusto.tcpmessenger.android.ui.theme.BorderSoft
 import com.megusto.tcpmessenger.android.ui.theme.BorderStrong
@@ -288,7 +289,6 @@ private fun RecipientDrawer(
             modifier = Modifier.fillMaxWidth(),
             color = ElevatedCard,
             shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, BorderSoft),
         ) {
             Row(
                 modifier = Modifier
@@ -501,9 +501,9 @@ private fun RecipientModeButton(
             modifier = modifier,
             onClick = onClick,
             enabled = enabled,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = colors,
-            border = BorderStroke(1.dp, BorderSoft),
+            border = BorderStroke(1.dp, BorderSoft.copy(alpha = 0.08f)),
         ) {
             Text(text = text, fontSize = 12.sp, maxLines = 1)
         }
@@ -517,21 +517,16 @@ private fun ClientRow(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = if (isSelected) AccentMuted else MainSurface
-    val border = when {
-        isSelected -> Accent.copy(alpha = 0.45f)
-        else -> BorderSoft
-    }
+    val background = if (isSelected) AccentMuted else ElevatedCard
     val statusColor = if (isOnline) Success else TextMuted.copy(alpha = 0.78f)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         color = background,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, border),
+        shape = RoundedCornerShape(16.dp),
     ) {
         Row(
             modifier = Modifier
@@ -588,9 +583,8 @@ private fun ClientRow(
 private fun EmptyPill(text: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         color = ElevatedCard,
-        border = BorderStroke(1.dp, BorderSoft),
     ) {
         Text(
             text = text,
@@ -711,13 +705,13 @@ private fun MessageBubble(message: MessageItem) {
                     ) {
                         Text(
                             text = message.text,
-                            color = TextPrimary,
+                            color = AccentOnBubble,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                         )
                         Text(
                             text = timeLabel,
-                            color = TextPrimary.copy(alpha = 0.72f),
+                            color = AccentOnBubble.copy(alpha = 0.60f),
                             fontSize = 11.sp,
                             modifier = Modifier.align(Alignment.End),
                         )
@@ -750,8 +744,7 @@ private fun MessageBubble(message: MessageItem) {
                     Surface(
                         modifier = Modifier.widthIn(max = 340.dp),
                         shape = RoundedCornerShape(16.dp),
-                        color = MessageSurface,
-                        border = BorderStroke(1.dp, BorderSoft),
+                        color = ElevatedCard,
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -787,13 +780,12 @@ private fun MessageBubble(message: MessageItem) {
 private fun SystemBadge(
     text: String,
     background: androidx.compose.ui.graphics.Color,
-    border: androidx.compose.ui.graphics.Color,
+    @Suppress("UNUSED_PARAMETER") border: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
 ) {
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = background,
-        border = BorderStroke(1.dp, border),
     ) {
         Text(
             text = text,
@@ -850,9 +842,8 @@ private fun ComposerArea(
         Spacer(modifier = Modifier.height(12.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             color = InputSurface,
-            border = BorderStroke(1.dp, BorderStrong),
         ) {
             Row(
                 modifier = Modifier
@@ -909,7 +900,6 @@ private fun ChatChip(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(999.dp),
         color = if (active) AccentMuted else ElevatedCard,
-        border = BorderStroke(1.dp, if (active) Accent.copy(alpha = 0.42f) else BorderSoft),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -937,12 +927,12 @@ private fun ChatChip(
 
 @Composable
 private fun drawerFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = MainSurface,
-    unfocusedContainerColor = MainSurface,
+    focusedContainerColor = ElevatedCard,
+    unfocusedContainerColor = ElevatedCard,
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary,
     focusedBorderColor = Accent,
-    unfocusedBorderColor = BorderSoft,
+    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
     cursorColor = Accent,
     focusedPlaceholderColor = TextMuted,
     unfocusedPlaceholderColor = TextMuted,
@@ -956,8 +946,8 @@ private fun composerFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary,
     disabledTextColor = TextMuted,
-    focusedBorderColor = BorderSoft,
-    unfocusedBorderColor = BorderSoft,
-    disabledBorderColor = BorderSoft,
+    focusedBorderColor = Accent,
+    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+    disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
     cursorColor = Accent,
 )

@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 
 private val MessengerDarkScheme = darkColorScheme(
     primary = Accent,
-    onPrimary = TextPrimary,
+    onPrimary = AccentOnBubble,
     secondary = TextSecondary,
     onSecondary = TextPrimary,
     tertiary = InfoBlue,

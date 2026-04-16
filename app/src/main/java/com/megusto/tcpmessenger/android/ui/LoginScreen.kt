@@ -172,16 +172,12 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(18.dp))
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = if (discoveryState == "found") {
                             Accent.copy(alpha = 0.10f)
                         } else {
                             InputSurface
                         },
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (discoveryState == "found") Accent.copy(alpha = 0.30f) else BorderSoft,
-                        ),
                     ) {
                         Row(
                             modifier = Modifier
@@ -310,9 +306,8 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.32f)),
                         ) {
                             Text(
                                 text = error,
@@ -372,7 +367,7 @@ private fun MessengerField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = TextPrimary,
             ),
@@ -390,8 +385,8 @@ private fun MessengerField(
                 unfocusedTextColor = TextPrimary,
                 disabledTextColor = TextPrimary,
                 focusedBorderColor = Accent,
-                unfocusedBorderColor = BorderSoft,
-                disabledBorderColor = BorderSoft,
+                unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
                 cursorColor = Accent,
                 focusedPlaceholderColor = TextMuted,
                 unfocusedPlaceholderColor = TextMuted,
