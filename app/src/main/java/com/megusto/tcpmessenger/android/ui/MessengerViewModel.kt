@@ -172,6 +172,7 @@ class MessengerViewModel : ViewModel() {
             )
 
             is ServerEvent.Clients -> dispatch(ChatAction.ClientsUpdated(event.names))
+            is ServerEvent.ClientPlatforms -> dispatch(ChatAction.ClientPlatformsUpdated(event.platforms))
             ServerEvent.Disconnected -> dispatch(ChatAction.Disconnected)
         }
     }

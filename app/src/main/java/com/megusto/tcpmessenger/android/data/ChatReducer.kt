@@ -61,6 +61,7 @@ object ChatReducer {
                 chatOrder = chatUpdate.chatOrder,
                 activeChatId = GENERAL_CHAT_ID,
                 clients = if (state.clients.isEmpty()) listOf(action.name) else state.clients,
+                clientPlatforms = state.clientPlatforms + mapOf(action.name to ClientPlatform.ANDROID),
                 pendingOwnMessages = emptyList(),
                 groupMode = GroupMode.ALL,
                 selectedClients = emptySet(),
@@ -123,7 +124,10 @@ object ChatReducer {
                 client != state.userName && client !in nextClientSet
             }
 
-            var nextState = state.copy(clients = nextClients)
+            var nextState = state.copy(
+                clients = nextClients,
+                clientPlatforms = state.clientPlatforms.filterKeys(nextClientSet::contains),
+            )
 
             joined.forEach { name ->
                 val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
@@ -161,7 +165,37 @@ object ChatReducer {
                 }.toSet()
             }
 
-            nextState.copy(selectedClients = nextSelectedClients)
+            nextState.copy(
+                clientPlatforms = buildMap {
+                    putAll(nextState.clientPlatforms)
+                    if (nextState.userName.isNotBlank()) {
+                        put(nextState.userName, ClientPlatform.ANDROID)
+                    }
+                },
+                selectedClients = nextSelectedClients,
+            )
+        }
+
+        is ChatAction.ClientPlatformsUpdated -> {
+            val visibleClients = buildSet {
+                addAll(state.clients)
+                if (state.userName.isNotBlank()) {
+                    add(state.userName)
+                }
+            }
+            val nextPlatforms = state.clientPlatforms.toMutableMap()
+
+            action.platforms.forEach { (name, platform) ->
+                if (name in visibleClients) {
+                    nextPlatforms[name] = platform
+                }
+            }
+
+            if (state.userName.isNotBlank() && state.userName !in nextPlatforms) {
+                nextPlatforms[state.userName] = ClientPlatform.ANDROID
+            }
+
+            state.copy(clientPlatforms = nextPlatforms)
         }
 
         is ChatAction.InfoReceived -> {

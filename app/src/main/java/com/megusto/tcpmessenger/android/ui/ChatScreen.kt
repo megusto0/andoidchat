@@ -32,7 +32,6 @@ import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -153,7 +152,6 @@ fun ChatScreen(
                     selectedClients = state.selectedClients,
                     search = search,
                     onSearchChange = { search = it },
-                    onRefreshClients = onRefreshClients,
                     onSelectAllRecipients = onSelectAllRecipients,
                     onSelectNoRecipients = onSelectNoRecipients,
                     onActivateSelectedRecipientsMode = onActivateSelectedRecipientsMode,
@@ -203,13 +201,6 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = onRefreshClients) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = "Обновить список клиентов",
-                                tint = TextPrimary,
-                            )
-                        }
                         IconButton(onClick = onDisconnect) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
@@ -257,20 +248,18 @@ private fun RecipientDrawer(
     selectedClients: Set<String>,
     search: String,
     onSearchChange: (String) -> Unit,
-    onRefreshClients: () -> Unit,
     onSelectAllRecipients: () -> Unit,
     onSelectNoRecipients: () -> Unit,
     onActivateSelectedRecipientsMode: () -> Unit,
     onToggleRecipient: (String) -> Unit,
 ) {
     val orderedClients = remember(clients, userName) {
-        clients.sortedWith(
-            compareBy<String> { if (it == userName) 0 else 1 }
-                .thenBy { it.lowercase(Locale.getDefault()) },
-        )
+        clients
+            .filter { it != userName }
+            .sortedBy { it.lowercase(Locale.getDefault()) }
     }
-    val otherClients = orderedClients.filter { it != userName }
-    val showSearch = orderedClients.size > 10
+    val otherClients = orderedClients
+    val showSearch = otherClients.size > 10
     val query = search.trim().lowercase(Locale.getDefault())
     val visibleClients = if (query.isBlank()) {
         orderedClients
@@ -348,7 +337,7 @@ private fun RecipientDrawer(
                     color = AccentMuted,
                 ) {
                     Text(
-                        text = "${orderedClients.size}",
+                        text = "${clients.size}",
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         color = TextPrimary,
                         fontSize = 12.sp,
@@ -386,7 +375,7 @@ private fun RecipientDrawer(
             )
             RecipientModeButton(
                 modifier = Modifier.weight(1f),
-                text = "Выбранные",
+                text = "Группа",
                 active = groupMode == GroupMode.CUSTOM,
                 enabled = groupMode != GroupMode.CUSTOM && otherClients.isNotEmpty(),
                 onClick = onActivateSelectedRecipientsMode,
@@ -402,27 +391,12 @@ private fun RecipientDrawer(
         )
 
         Spacer(modifier = Modifier.height(18.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Клиенты",
-                color = TextSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = onRefreshClients) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Обновить")
-            }
-        }
+        Text(
+            text = "Клиенты",
+            color = TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
 
         if (showSearch) {
             Spacer(modifier = Modifier.height(12.dp))
@@ -465,9 +439,9 @@ private fun RecipientDrawer(
             contentPadding = PaddingValues(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (orderedClients.isEmpty()) {
+            if (otherClients.isEmpty()) {
                 item {
-                    EmptyPill("Запрашиваем список подключённых клиентов...")
+                    EmptyPill("Другие клиенты появятся здесь после подключения.")
                 }
             } else if (visibleClients.isEmpty()) {
                 item {
@@ -475,13 +449,11 @@ private fun RecipientDrawer(
                 }
             } else {
                 items(visibleClients, key = { it }) { clientName ->
-                    val isSelf = clientName == userName
-                    val isSelected = !isSelf && selectedClients.contains(clientName)
+                    val isSelected = selectedClients.contains(clientName)
                     ClientRow(
                         name = clientName,
-                        isSelf = isSelf,
                         isSelected = isSelected,
-                        onClick = { if (!isSelf) onToggleRecipient(clientName) },
+                        onClick = { onToggleRecipient(clientName) },
                     )
                 }
             }
@@ -518,7 +490,7 @@ private fun RecipientModeButton(
             shape = RoundedCornerShape(16.dp),
             colors = colors,
         ) {
-            Text(text = text, fontSize = 13.sp)
+            Text(text = text, fontSize = 12.sp, maxLines = 1)
         }
     } else {
         OutlinedButton(
@@ -529,7 +501,7 @@ private fun RecipientModeButton(
             colors = colors,
             border = BorderStroke(1.dp, BorderSoft),
         ) {
-            Text(text = text, fontSize = 13.sp)
+            Text(text = text, fontSize = 12.sp, maxLines = 1)
         }
     }
 }
@@ -537,15 +509,10 @@ private fun RecipientModeButton(
 @Composable
 private fun ClientRow(
     name: String,
-    isSelf: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val background = when {
-        isSelf -> ElevatedCard
-        isSelected -> AccentMuted
-        else -> MainSurface
-    }
+    val background = if (isSelected) AccentMuted else MainSurface
     val border = when {
         isSelected -> Accent.copy(alpha = 0.45f)
         else -> BorderSoft
@@ -555,7 +522,7 @@ private fun ClientRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable(enabled = !isSelf, onClick = onClick),
+            .clickable(onClick = onClick),
         color = background,
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, border),
@@ -570,7 +537,7 @@ private fun ClientRow(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(if (isSelf) Accent.copy(alpha = 0.18f) else MessageSurface),
+                    .background(MessageSurface),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -580,7 +547,10 @@ private fun ClientRow(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = name,
                     color = TextPrimary,
@@ -589,28 +559,12 @@ private fun ClientRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (isSelf) "Текущий клиент" else "Нажмите, чтобы ${if (isSelected) "убрать из группы" else "добавить в группу"}",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = if (isSelf) AccentMuted else if (isSelected) Accent.copy(alpha = 0.22f) else ElevatedCard,
-            ) {
-                Text(
-                    text = when {
-                        isSelf -> "вы"
-                        isSelected -> "в группе"
-                        else -> "онлайн"
-                    },
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    color = TextPrimary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Success),
                 )
             }
         }
@@ -739,7 +693,7 @@ private fun MessageBubble(message: MessageItem) {
                     color = Accent,
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                     ) {
                         Text(
                             text = message.text,
@@ -747,7 +701,7 @@ private fun MessageBubble(message: MessageItem) {
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = timeLabel,
                             color = TextPrimary.copy(alpha = 0.72f),
@@ -787,7 +741,7 @@ private fun MessageBubble(message: MessageItem) {
                         border = BorderStroke(1.dp, BorderSoft),
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                         ) {
                             Text(
                                 text = message.sender,
@@ -795,14 +749,14 @@ private fun MessageBubble(message: MessageItem) {
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = message.text,
                                 color = TextPrimary,
                                 fontSize = 15.sp,
                                 lineHeight = 22.sp,
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = timeLabel,
                                 color = TextMuted,

@@ -55,6 +55,26 @@ enum class GroupMode {
     }
 }
 
+enum class ClientPlatform {
+    DESKTOP,
+    ANDROID,
+    UNKNOWN;
+
+    fun toProtocolValue(): String = when (this) {
+        DESKTOP -> "desktop"
+        ANDROID -> "android"
+        UNKNOWN -> "unknown"
+    }
+
+    companion object {
+        fun fromProtocolValue(raw: String?): ClientPlatform = when (raw?.lowercase(Locale.ROOT)) {
+            "desktop" -> DESKTOP
+            "android" -> ANDROID
+            else -> UNKNOWN
+        }
+    }
+}
+
 enum class ConnectionStatus {
     DISCONNECTED,
     CONNECTING,
@@ -74,6 +94,7 @@ data class ChatState(
     val chatOrder: List<String> = emptyList(),
     val activeChatId: String? = null,
     val clients: List<String> = emptyList(),
+    val clientPlatforms: Map<String, ClientPlatform> = emptyMap(),
     val pendingOwnMessages: List<PendingOwnMessage> = emptyList(),
     val groupMode: GroupMode = GroupMode.ALL,
     val selectedClients: Set<String> = emptySet(),
@@ -102,6 +123,10 @@ sealed interface ChatAction {
 
     data class ClientsUpdated(
         val clients: List<String>,
+    ) : ChatAction
+
+    data class ClientPlatformsUpdated(
+        val platforms: Map<String, ClientPlatform>,
     ) : ChatAction
 
     data class InfoReceived(
@@ -144,5 +169,6 @@ sealed interface ServerEvent {
     ) : ServerEvent
 
     data class Clients(val names: List<String>) : ServerEvent
+    data class ClientPlatforms(val platforms: Map<String, ClientPlatform>) : ServerEvent
     data object Disconnected : ServerEvent
 }

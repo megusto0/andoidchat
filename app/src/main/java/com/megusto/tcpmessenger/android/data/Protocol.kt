@@ -6,7 +6,13 @@ import org.json.JSONObject
 import java.util.Locale
 
 object MessengerProtocol {
-    fun buildLoginCommand(name: String): String = "LOGIN|$name"
+    fun buildLoginCommand(
+        name: String,
+        platform: ClientPlatform = ClientPlatform.ANDROID,
+    ): String = "LOGIN|" + JSONObject()
+        .put("name", name)
+        .put("platform", platform.toProtocolValue())
+        .toString()
 
     fun buildListCommand(): String = "LIST|"
 
@@ -39,8 +45,27 @@ object MessengerProtocol {
                     .map { it.trim() }
                     .filter { it.isNotEmpty() },
             )
+            "CLIENTS_META" -> ServerEvent.ClientPlatforms(parseClientPlatforms(payload))
             "MESSAGE" -> parseMessagePayload(payload)
             else -> ServerEvent.Info("$command|$payload")
+        }
+    }
+
+    private fun parseClientPlatforms(payload: String): Map<String, ClientPlatform> {
+        return try {
+            val parsed = JSONObject(payload)
+            buildMap {
+                val keys = parsed.keys()
+                while (keys.hasNext()) {
+                    val name = keys.next()
+                    val platform = ClientPlatform.fromProtocolValue(parsed.optString(name))
+                    if (name.isNotBlank()) {
+                        put(name, platform)
+                    }
+                }
+            }
+        } catch (_: JSONException) {
+            emptyMap()
         }
     }
 
