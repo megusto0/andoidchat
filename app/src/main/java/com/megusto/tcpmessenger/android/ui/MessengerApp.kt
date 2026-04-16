@@ -16,6 +16,7 @@ fun MessengerApp(
             status = state.value.connectionStatus,
             error = state.value.error,
             onConnect = viewModel::connect,
+            onDiscoverServer = viewModel::discoverServer,
         )
 
         Screen.CHAT -> ChatScreen(

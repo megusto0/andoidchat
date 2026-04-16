@@ -6,7 +6,9 @@ import com.megusto.tcpmessenger.android.data.ChatAction
 import com.megusto.tcpmessenger.android.data.ChatReducer
 import com.megusto.tcpmessenger.android.data.ChatState
 import com.megusto.tcpmessenger.android.data.GroupMode
+import com.megusto.tcpmessenger.android.data.DiscoveredServer
 import com.megusto.tcpmessenger.android.data.ServerEvent
+import com.megusto.tcpmessenger.android.data.ServerDiscovery
 import com.megusto.tcpmessenger.android.data.TcpMessengerClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,6 +65,10 @@ class MessengerViewModel : ViewModel() {
                 }
         }
     }
+
+    suspend fun discoverServer(): DiscoveredServer? = runCatching {
+        ServerDiscovery.discover()
+    }.getOrNull()
 
     fun sendMessage(text: String) {
         val message = text.trim()

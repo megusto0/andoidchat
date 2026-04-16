@@ -24,13 +24,16 @@ import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.megusto.tcpmessenger.android.data.ConnectionStatus
+import com.megusto.tcpmessenger.android.data.DiscoveredServer
 import com.megusto.tcpmessenger.android.ui.theme.Accent
 import com.megusto.tcpmessenger.android.ui.theme.AppBackground
 import com.megusto.tcpmessenger.android.ui.theme.BorderSoft
@@ -52,17 +56,50 @@ import com.megusto.tcpmessenger.android.ui.theme.InputSurface
 import com.megusto.tcpmessenger.android.ui.theme.TextMuted
 import com.megusto.tcpmessenger.android.ui.theme.TextPrimary
 import com.megusto.tcpmessenger.android.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
     status: ConnectionStatus,
     error: String?,
     onConnect: (host: String, port: String, name: String) -> Unit,
+    onDiscoverServer: suspend () -> DiscoveredServer?,
 ) {
     var host by rememberSaveable { mutableStateOf("10.0.2.2") }
     var port by rememberSaveable { mutableStateOf("5000") }
     var name by rememberSaveable { mutableStateOf("") }
+    var hostEdited by rememberSaveable { mutableStateOf(false) }
+    var portEdited by rememberSaveable { mutableStateOf(false) }
+    var discoveryState by rememberSaveable { mutableStateOf("searching") }
+    var discoveryText by rememberSaveable {
+        mutableStateOf("Ищем TCP-сервер в локальной сети…")
+    }
     val connecting = status == ConnectionStatus.CONNECTING
+    val scope = rememberCoroutineScope()
+
+    suspend fun runDiscovery(forceApply: Boolean) {
+        discoveryState = "searching"
+        discoveryText = "Ищем TCP-сервер в локальной сети…"
+
+        val discovered = onDiscoverServer()
+        if (discovered != null) {
+            if (forceApply || !hostEdited) {
+                host = discovered.host
+            }
+            if (forceApply || !portEdited) {
+                port = discovered.port.toString()
+            }
+            discoveryState = "found"
+            discoveryText = "Сервер найден автоматически: ${discovered.host}:${discovered.port}"
+        } else {
+            discoveryState = "not_found"
+            discoveryText = "Сервер не найден автоматически. Укажите IP-адрес и порт вручную."
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        runDiscovery(forceApply = false)
+    }
 
     Box(
         modifier = Modifier
@@ -126,6 +163,54 @@ fun LoginScreen(
                     lineHeight = 20.sp,
                 )
 
+                Spacer(modifier = Modifier.height(18.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (discoveryState == "found") {
+                        Accent.copy(alpha = 0.10f)
+                    } else {
+                        InputSurface
+                    },
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (discoveryState == "found") Accent.copy(alpha = 0.30f) else BorderSoft,
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (discoveryState == "searching") {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Accent,
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
+                        Text(
+                            text = discoveryText,
+                            color = if (discoveryState == "found") TextPrimary else TextSecondary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { scope.launch { runDiscovery(forceApply = true) } },
+                    enabled = discoveryState != "searching",
+                    shape = RoundedCornerShape(18.dp),
+                ) {
+                    Text("Найти сервер")
+                }
+
                 Spacer(modifier = Modifier.height(22.dp))
 
                 BoxWithConstraints(
@@ -138,13 +223,19 @@ fun LoginScreen(
                         ) {
                             MessengerField(
                                 value = host,
-                                onValueChange = { host = it },
+                                onValueChange = {
+                                    hostEdited = true
+                                    host = it
+                                },
                                 label = "IP-адрес",
                                 placeholder = "10.0.2.2",
                             )
                             MessengerField(
                                 value = port,
-                                onValueChange = { port = it },
+                                onValueChange = {
+                                    portEdited = true
+                                    port = it
+                                },
                                 label = "Порт",
                                 placeholder = "5000",
                                 keyboardType = KeyboardType.Number,
@@ -158,14 +249,20 @@ fun LoginScreen(
                             MessengerField(
                                 modifier = Modifier.weight(1f),
                                 value = host,
-                                onValueChange = { host = it },
+                                onValueChange = {
+                                    hostEdited = true
+                                    host = it
+                                },
                                 label = "IP-адрес",
                                 placeholder = "10.0.2.2",
                             )
                             MessengerField(
                                 modifier = Modifier.width(140.dp),
                                 value = port,
-                                onValueChange = { port = it },
+                                onValueChange = {
+                                    portEdited = true
+                                    port = it
+                                },
                                 label = "Порт",
                                 placeholder = "5000",
                                 keyboardType = KeyboardType.Number,
