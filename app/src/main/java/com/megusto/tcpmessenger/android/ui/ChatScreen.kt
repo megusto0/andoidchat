@@ -3,7 +3,6 @@ package com.megusto.tcpmessenger.android.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -216,6 +216,7 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .imePadding()
                     .background(AppBackground),
             ) {
                 MessageList(
@@ -689,11 +690,11 @@ private fun MessageBubble(message: MessageItem) {
             ) {
                 Surface(
                     modifier = Modifier.widthIn(max = 340.dp),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = Accent,
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
                         Text(
                             text = message.text,
@@ -701,7 +702,7 @@ private fun MessageBubble(message: MessageItem) {
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = timeLabel,
                             color = TextPrimary.copy(alpha = 0.72f),
@@ -736,12 +737,12 @@ private fun MessageBubble(message: MessageItem) {
                     Spacer(modifier = Modifier.width(10.dp))
                     Surface(
                         modifier = Modifier.widthIn(max = 340.dp),
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = MessageSurface,
                         border = BorderStroke(1.dp, BorderSoft),
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {
                             Text(
                                 text = message.sender,
@@ -749,14 +750,14 @@ private fun MessageBubble(message: MessageItem) {
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = message.text,
                                 color = TextPrimary,
                                 fontSize = 15.sp,
                                 lineHeight = 22.sp,
                             )
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = timeLabel,
                                 color = TextMuted,
@@ -838,7 +839,7 @@ private fun ComposerArea(
         Spacer(modifier = Modifier.height(12.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(16.dp),
             color = InputSurface,
             border = BorderStroke(1.dp, BorderStrong),
         ) {
@@ -863,13 +864,13 @@ private fun ComposerArea(
                     enabled = canSend,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     colors = composerFieldColors(),
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(16.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = onSend,
                     enabled = draft.trim().isNotEmpty() && canSend,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(16.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
                 ) {
                     Icon(
@@ -880,15 +881,6 @@ private fun ComposerArea(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Enter на Android заменяется кнопкой отправки. Чат-пузырьки выше переключают контекст истории.",
-            color = TextMuted,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
     }
 }
 

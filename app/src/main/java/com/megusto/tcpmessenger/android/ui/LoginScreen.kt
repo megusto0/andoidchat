@@ -9,17 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material3.Button
@@ -114,228 +114,237 @@ fun LoginScreen(
                         AppBackground,
                     ),
                 ),
-            )
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 32.dp),
-        contentAlignment = Alignment.Center,
+            ),
     ) {
-        Surface(
+        Column(
             modifier = Modifier
+                .fillMaxHeight()
                 .fillMaxWidth()
-                .widthIn(max = 520.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = ElevatedCard,
-            shadowElevation = 18.dp,
-            tonalElevation = 4.dp,
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 22.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .widthIn(max = 520.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = ElevatedCard,
+                shadowElevation = 18.dp,
+                tonalElevation = 4.dp,
             ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Accent.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    androidx.compose.foundation.Image(
-                        painter = rememberVectorPainter(Icons.Rounded.ChatBubbleOutline),
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Text(
-                    text = "TCP Messenger",
-                    color = TextPrimary,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Подключитесь к TCP-серверу для обмена сообщениями",
-                    color = TextSecondary,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp,
-                )
-
-                Spacer(modifier = Modifier.height(18.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    color = if (discoveryState == "found") {
-                        Accent.copy(alpha = 0.10f)
-                    } else {
-                        InputSurface
-                    },
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (discoveryState == "found") Accent.copy(alpha = 0.30f) else BorderSoft,
-                    ),
-                ) {
-                    Row(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Accent.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        if (discoveryState == "searching") {
+                        androidx.compose.foundation.Image(
+                            painter = rememberVectorPainter(Icons.Rounded.ChatBubbleOutline),
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Text(
+                        text = "TCP Messenger",
+                        color = TextPrimary,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Подключитесь к TCP-серверу для обмена сообщениями",
+                        color = TextSecondary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp,
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (discoveryState == "found") {
+                            Accent.copy(alpha = 0.10f)
+                        } else {
+                            InputSurface
+                        },
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (discoveryState == "found") Accent.copy(alpha = 0.30f) else BorderSoft,
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (discoveryState == "searching") {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Accent,
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                            }
+                            Text(
+                                text = discoveryText,
+                                color = if (discoveryState == "found") TextPrimary else TextSecondary,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { scope.launch { runDiscovery(forceApply = true) } },
+                        enabled = discoveryState != "searching",
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Text("Найти сервер")
+                    }
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        val compact = maxWidth < 420.dp
+                        if (compact) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                MessengerField(
+                                    value = host,
+                                    onValueChange = {
+                                        hostEdited = true
+                                        host = it
+                                    },
+                                    label = "IP-адрес",
+                                    placeholder = "10.0.2.2",
+                                )
+                                MessengerField(
+                                    value = port,
+                                    onValueChange = {
+                                        portEdited = true
+                                        port = it
+                                    },
+                                    label = "Порт",
+                                    placeholder = "5000",
+                                    keyboardType = KeyboardType.Number,
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                MessengerField(
+                                    modifier = Modifier.weight(1f),
+                                    value = host,
+                                    onValueChange = {
+                                        hostEdited = true
+                                        host = it
+                                    },
+                                    label = "IP-адрес",
+                                    placeholder = "10.0.2.2",
+                                )
+                                MessengerField(
+                                    modifier = Modifier.width(140.dp),
+                                    value = port,
+                                    onValueChange = {
+                                        portEdited = true
+                                        port = it
+                                    },
+                                    label = "Порт",
+                                    placeholder = "5000",
+                                    keyboardType = KeyboardType.Number,
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    MessengerField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = name,
+                        onValueChange = { name = it },
+                        label = "Имя пользователя",
+                        placeholder = "Введите ваше имя",
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onConnect(host, port, name) },
+                        enabled = !connecting && name.trim().isNotEmpty(),
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        if (connecting) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = Accent,
+                                color = TextPrimary,
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                         }
-                        Text(
-                            text = discoveryText,
-                            color = if (discoveryState == "found") TextPrimary else TextSecondary,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Text(if (connecting) "Подключение..." else "Подключиться")
                     }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { scope.launch { runDiscovery(forceApply = true) } },
-                    enabled = discoveryState != "searching",
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    Text("Найти сервер")
-                }
-
-                Spacer(modifier = Modifier.height(22.dp))
-
-                BoxWithConstraints(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    val compact = maxWidth < 420.dp
-                    if (compact) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            MessengerField(
-                                value = host,
-                                onValueChange = {
-                                    hostEdited = true
-                                    host = it
-                                },
-                                label = "IP-адрес",
-                                placeholder = "10.0.2.2",
-                            )
-                            MessengerField(
-                                value = port,
-                                onValueChange = {
-                                    portEdited = true
-                                    port = it
-                                },
-                                label = "Порт",
-                                placeholder = "5000",
-                                keyboardType = KeyboardType.Number,
-                            )
-                        }
-                    } else {
-                        Row(
+                    if (!error.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.32f)),
                         ) {
-                            MessengerField(
-                                modifier = Modifier.weight(1f),
-                                value = host,
-                                onValueChange = {
-                                    hostEdited = true
-                                    host = it
-                                },
-                                label = "IP-адрес",
-                                placeholder = "10.0.2.2",
-                            )
-                            MessengerField(
-                                modifier = Modifier.width(140.dp),
-                                value = port,
-                                onValueChange = {
-                                    portEdited = true
-                                    port = it
-                                },
-                                label = "Порт",
-                                placeholder = "5000",
-                                keyboardType = KeyboardType.Number,
+                            Text(
+                                text = error,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
                             )
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                MessengerField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = name,
-                    onValueChange = { name = it },
-                    label = "Имя пользователя",
-                    placeholder = "Введите ваше имя",
-                )
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { onConnect(host, port, name) },
-                    enabled = !connecting && name.trim().isNotEmpty(),
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    if (connecting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = TextPrimary,
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                    Text(if (connecting) "Подключение..." else "Подключиться")
-                }
-
-                if (!error.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.32f)),
-                    ) {
-                        Text(
-                            text = error,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = "Проверка варианта 16: <@> level madam radar",
-                    color = TextMuted,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Эмулятор Android: 10.0.2.2, физическое устройство: IP компьютера в сети",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 16.sp,
-                )
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Text(
+                text = "Проверка варианта 16: <@> level madam radar",
+                color = TextMuted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 520.dp),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Эмулятор Android: 10.0.2.2, физическое устройство: IP компьютера в сети",
+                color = TextMuted,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp,
+                modifier = Modifier.widthIn(max = 520.dp),
+            )
         }
     }
 }
