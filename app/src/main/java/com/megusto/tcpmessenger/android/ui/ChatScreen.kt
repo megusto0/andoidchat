@@ -1,5 +1,13 @@
 package com.megusto.tcpmessenger.android.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +31,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -62,6 +71,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -137,6 +148,8 @@ fun ChatScreen(
         }
     }
 
+    val dividerColor = BorderSoft
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -167,6 +180,14 @@ fun ChatScreen(
             contentWindowInsets = WindowInsets.statusBars,
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.drawBehind {
+                        drawLine(
+                            color = dividerColor,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 0.5.dp.toPx(),
+                        )
+                    },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MainSurface,
                         titleContentColor = TextPrimary,
@@ -186,20 +207,28 @@ fun ChatScreen(
                                 text = "TCP Messenger",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.3).sp,
                             )
-                            Text(
-                                text = when (state.connectionStatus) {
-                                    ConnectionStatus.CONNECTING -> "Подключение..."
-                                    ConnectionStatus.CONNECTED -> "В сети"
-                                    ConnectionStatus.DISCONNECTED -> "Отключено"
-                                },
-                                fontSize = 12.sp,
-                                color = if (state.connectionStatus == ConnectionStatus.CONNECTED) {
-                                    Success
-                                } else {
-                                    TextMuted
-                                },
-                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (state.connectionStatus == ConnectionStatus.CONNECTED) {
+                                    PulsingDot()
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                Text(
+                                    text = when (state.connectionStatus) {
+                                        ConnectionStatus.CONNECTING -> "Подключение..."
+                                        ConnectionStatus.CONNECTED -> "В сети"
+                                        ConnectionStatus.DISCONNECTED -> "Отключено"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = if (state.connectionStatus == ConnectionStatus.CONNECTED) {
+                                        Success
+                                    } else {
+                                        TextMuted
+                                    },
+                                )
+                            }
                         }
                     },
                     actions = {
@@ -241,6 +270,26 @@ fun ChatScreen(
             }
         }
     }
+}
+
+@Composable
+private fun PulsingDot() {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val alpha by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulseAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .clip(CircleShape)
+            .background(Success.copy(alpha = alpha)),
+    )
 }
 
 @Composable
@@ -316,17 +365,13 @@ private fun RecipientDrawer(
                         color = TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.2).sp,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Success),
-                        )
+                        PulsingDot()
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "В сети",
@@ -356,6 +401,7 @@ private fun RecipientDrawer(
             color = TextSecondary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.3.sp,
         )
         Spacer(modifier = Modifier.height(10.dp))
         Row(
@@ -399,6 +445,7 @@ private fun RecipientDrawer(
             color = TextSecondary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.3.sp,
         )
 
         if (showSearch) {
@@ -408,7 +455,7 @@ private fun RecipientDrawer(
                 value = search,
                 onValueChange = onSearchChange,
                 singleLine = true,
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(12.dp),
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Rounded.Search,
@@ -491,7 +538,7 @@ private fun RecipientModeButton(
             modifier = modifier,
             onClick = onClick,
             enabled = false,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = colors,
         ) {
             Text(text = text, fontSize = 12.sp, maxLines = 1)
@@ -556,6 +603,7 @@ private fun ClientRow(
                     color = TextPrimary,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
+                    letterSpacing = (-0.1).sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -596,6 +644,9 @@ private fun EmptyPill(text: String) {
     }
 }
 
+private fun isGroupable(type: MessageType): Boolean =
+    type == MessageType.OWN || type == MessageType.OTHER
+
 @Composable
 private fun MessageList(
     modifier: Modifier = Modifier,
@@ -628,6 +679,7 @@ private fun MessageList(
                     color = TextPrimary,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.3).sp,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
@@ -636,6 +688,7 @@ private fun MessageList(
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp,
+                    letterSpacing = (-0.1).sp,
                 )
             }
         } else {
@@ -643,10 +696,43 @@ private fun MessageList(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(messages, key = { it.id }) { message ->
-                    MessageBubble(message = message)
+                itemsIndexed(messages, key = { _, msg -> msg.id }) { index, message ->
+                    val prev = messages.getOrNull(index - 1)
+                    val next = messages.getOrNull(index + 1)
+
+                    val isFirstInGroup = !isGroupable(message.type) ||
+                        prev == null ||
+                        prev.type != message.type ||
+                        prev.sender != message.sender
+                    val isLastInGroup = !isGroupable(message.type) ||
+                        next == null ||
+                        next.type != message.type ||
+                        next.sender != message.sender
+
+                    val topSpacing = when {
+                        index == 0 -> 0.dp
+                        isFirstInGroup -> 12.dp
+                        else -> 3.dp
+                    }
+
+                    if (topSpacing.value > 0f) {
+                        Spacer(modifier = Modifier.height(topSpacing))
+                    }
+
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(150)) + slideInVertically(
+                            initialOffsetY = { it / 4 },
+                            animationSpec = tween(200),
+                        ),
+                    ) {
+                        MessageBubble(
+                            message = message,
+                            isFirstInGroup = isFirstInGroup,
+                            isLastInGroup = isLastInGroup,
+                        )
+                    }
                 }
             }
         }
@@ -654,7 +740,11 @@ private fun MessageList(
 }
 
 @Composable
-private fun MessageBubble(message: MessageItem) {
+private fun MessageBubble(
+    message: MessageItem,
+    isFirstInGroup: Boolean,
+    isLastInGroup: Boolean,
+) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val timeLabel = remember(message.timestampMillis) {
         timeFormatter.format(Date(message.timestampMillis))
@@ -669,7 +759,6 @@ private fun MessageBubble(message: MessageItem) {
                 SystemBadge(
                     text = message.text,
                     background = InfoBlue.copy(alpha = 0.14f),
-                    border = InfoBlue.copy(alpha = 0.26f),
                     contentColor = InfoBlue,
                 )
             }
@@ -683,20 +772,25 @@ private fun MessageBubble(message: MessageItem) {
                 SystemBadge(
                     text = message.text,
                     background = ErrorRed.copy(alpha = 0.12f),
-                    border = ErrorRed.copy(alpha = 0.24f),
                     contentColor = ErrorRed,
                 )
             }
         }
 
         MessageType.OWN -> {
+            val shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = if (isFirstInGroup) 16.dp else 4.dp,
+                bottomEnd = if (isLastInGroup) 4.dp else 4.dp,
+                bottomStart = 16.dp,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
                 Surface(
                     modifier = Modifier.widthIn(max = 340.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = shape,
                     color = Accent,
                 ) {
                     Column(
@@ -708,66 +802,85 @@ private fun MessageBubble(message: MessageItem) {
                             color = AccentOnBubble,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
+                            letterSpacing = (-0.2).sp,
                         )
-                        Text(
-                            text = timeLabel,
-                            color = AccentOnBubble.copy(alpha = 0.60f),
-                            fontSize = 11.sp,
-                            modifier = Modifier.align(Alignment.End),
-                        )
+                        if (isLastInGroup) {
+                            Text(
+                                text = timeLabel,
+                                color = AccentOnBubble.copy(alpha = 0.55f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
                     }
                 }
             }
         }
 
         MessageType.OTHER -> {
+            val shape = RoundedCornerShape(
+                topStart = if (isFirstInGroup) 4.dp else 4.dp,
+                topEnd = 16.dp,
+                bottomEnd = 16.dp,
+                bottomStart = if (isLastInGroup) 4.dp else 4.dp,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Start,
             ) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(ElevatedCard),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = message.sender.firstOrNull()?.uppercase() ?: "?",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                    if (isFirstInGroup) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(ElevatedCard),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = message.sender.firstOrNull()?.uppercase() ?: "?",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(34.dp))
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Surface(
                         modifier = Modifier.widthIn(max = 340.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = shape,
                         color = ElevatedCard,
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            Text(
-                                text = message.sender,
-                                color = TextSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            if (isFirstInGroup) {
+                                Text(
+                                    text = message.sender,
+                                    color = Accent.copy(alpha = 0.85f),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.2.sp,
+                                )
+                            }
                             Text(
                                 text = message.text,
                                 color = TextPrimary,
                                 fontSize = 15.sp,
                                 lineHeight = 22.sp,
+                                letterSpacing = (-0.2).sp,
                             )
-                            Text(
-                                text = timeLabel,
-                                color = TextMuted,
-                                fontSize = 11.sp,
-                                modifier = Modifier.align(Alignment.End),
-                            )
+                            if (isLastInGroup) {
+                                Text(
+                                    text = timeLabel,
+                                    color = TextMuted,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.align(Alignment.End),
+                                )
+                            }
                         }
                     }
                 }
@@ -780,7 +893,6 @@ private fun MessageBubble(message: MessageItem) {
 private fun SystemBadge(
     text: String,
     background: androidx.compose.ui.graphics.Color,
-    @Suppress("UNUSED_PARAMETER") border: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
 ) {
     Surface(
@@ -808,9 +920,19 @@ private fun ComposerArea(
     onSwitchChat: (String) -> Unit,
     onSend: () -> Unit,
 ) {
+    val dividerColor = BorderSoft
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .drawBehind {
+                drawLine(
+                    color = dividerColor,
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 0.5.dp.toPx(),
+                )
+            }
             .background(MainSurface)
             .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
     ) {
@@ -840,47 +962,40 @@ private fun ComposerArea(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Surface(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = InputSurface,
+            verticalAlignment = Alignment.Bottom,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier.weight(1f),
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    minLines = 1,
-                    maxLines = 5,
-                    placeholder = {
-                        Text(
-                            text = if (canSend) "Введите сообщение..." else "Выберите адресатов...",
-                            color = TextMuted,
-                        )
-                    },
-                    enabled = canSend,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    colors = composerFieldColors(),
-                    shape = RoundedCornerShape(16.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onSend,
-                    enabled = draft.trim().isNotEmpty() && canSend,
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.Send,
-                        contentDescription = "Отправить сообщение",
-                        modifier = Modifier.size(18.dp),
+            OutlinedTextField(
+                modifier = Modifier.weight(1f),
+                value = draft,
+                onValueChange = onDraftChange,
+                minLines = 1,
+                maxLines = 5,
+                placeholder = {
+                    Text(
+                        text = if (canSend) "Введите сообщение..." else "Выберите адресатов...",
+                        color = TextMuted,
                     )
-                }
+                },
+                enabled = canSend,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                colors = composerFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Button(
+                onClick = onSend,
+                enabled = draft.trim().isNotEmpty() && canSend,
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(44.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.Send,
+                    contentDescription = "Отправить сообщение",
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }

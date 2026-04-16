@@ -159,6 +159,7 @@ fun LoginScreen(
                         color = TextPrimary,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.4).sp,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -167,6 +168,7 @@ fun LoginScreen(
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,
                         lineHeight = 20.sp,
+                        letterSpacing = (-0.1).sp,
                     )
 
                     Spacer(modifier = Modifier.height(18.dp))
