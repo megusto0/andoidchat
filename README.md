@@ -19,17 +19,22 @@ docs/
 
 ## Quick Start
 
+Install desktop dependencies:
+
+```bash
+npm run desktop:install
+```
+
+Check the desktop environment:
+
+```bash
+npm run desktop:doctor
+```
+
 Start the server:
 
 ```bash
 npm run server:start
-```
-
-Build the desktop frontend:
-
-```bash
-npm run desktop:install
-npm run desktop:build
 ```
 
 Run the desktop app:
@@ -38,11 +43,24 @@ Run the desktop app:
 npm run desktop:tauri
 ```
 
+Build the desktop frontend only:
+
+```bash
+npm run desktop:build
+```
+
 Build the Android client:
 
 ```bash
 npm run android:build
 ```
+
+## Desktop Notes
+
+- The desktop launcher uses the local `apps/desktop/node_modules` binaries instead of `npx`, so run `npm run desktop:install` first.
+- Tauri desktop builds require Rust. If Rust was installed with rustup in the default Windows location, `desktop:doctor` and `desktop:tauri` will add `%USERPROFILE%\.cargo\bin` to `PATH` for that run.
+- If `desktop:doctor` still reports that `cargo` is missing, reopen the terminal after installing Rust and try again.
+- Windows builds need both `apps/desktop/src-tauri/icons/icon.png` and `apps/desktop/src-tauri/icons/icon.ico`. Keep both files when replacing the app icon.
 
 ## Direct Paths
 

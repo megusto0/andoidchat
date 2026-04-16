@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri:dev": "node scripts/run-tauri-dev.mjs",
+    "tauri:doctor": "node scripts/run-tauri-dev.mjs --check"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

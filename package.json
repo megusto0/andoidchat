@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "scripts": {
     "desktop:install": "npm --prefix apps/desktop install",
+    "desktop:doctor": "npm --prefix apps/desktop run tauri:doctor",
     "desktop:dev": "npm --prefix apps/desktop run dev",
     "desktop:build": "npm --prefix apps/desktop run build",
-    "desktop:tauri": "cd apps/desktop && npx tauri dev",
+    "desktop:tauri": "npm --prefix apps/desktop run tauri:dev",
     "server:start": "python3 services/tcp-server/server_async.py 5000",
     "android:build": "cd apps/android && ./gradlew :app:assembleDebug",
     "cli:start": "python3 tools/cli-client/client.py 127.0.0.1 5000",
