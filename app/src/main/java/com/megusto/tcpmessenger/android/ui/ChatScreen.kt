@@ -148,6 +148,7 @@ fun ChatScreen(
                 RecipientDrawer(
                     userName = state.userName,
                     clients = state.clients,
+                    onlineClients = state.onlineClients,
                     groupMode = state.groupMode,
                     selectedClients = state.selectedClients,
                     search = search,
@@ -245,6 +246,7 @@ fun ChatScreen(
 private fun RecipientDrawer(
     userName: String,
     clients: List<String>,
+    onlineClients: Set<String>,
     groupMode: GroupMode,
     selectedClients: Set<String>,
     search: String,
@@ -453,6 +455,7 @@ private fun RecipientDrawer(
                     val isSelected = selectedClients.contains(clientName)
                     ClientRow(
                         name = clientName,
+                        isOnline = clientName in onlineClients,
                         isSelected = isSelected,
                         onClick = { onToggleRecipient(clientName) },
                     )
@@ -510,6 +513,7 @@ private fun RecipientModeButton(
 @Composable
 private fun ClientRow(
     name: String,
+    isOnline: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -518,6 +522,7 @@ private fun ClientRow(
         isSelected -> Accent.copy(alpha = 0.45f)
         else -> BorderSoft
     }
+    val statusColor = if (isOnline) Success else TextMuted.copy(alpha = 0.78f)
 
     Surface(
         modifier = Modifier
@@ -548,9 +553,8 @@ private fun ClientRow(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Row(
+            Column(
                 modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = name,
@@ -560,13 +564,21 @@ private fun ClientRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Success),
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(statusColor),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isOnline) "В сети" else "Offline",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                    )
+                }
             }
         }
     }

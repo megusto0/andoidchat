@@ -27,278 +27,327 @@ object ChatReducer {
 
     fun reduce(state: ChatState, action: ChatAction): ChatState {
         return when (action) {
-        is ChatAction.Connect -> state.copy(
-            connectionStatus = ConnectionStatus.CONNECTING,
-            error = null,
-            userName = action.name,
-        )
-
-        is ChatAction.Connected -> {
-            val generalDescriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
-            val connectionMessage = makeMessage(
-                type = MessageType.INFO,
-                sender = "Сервер",
-                text = "Подключение установлено",
+            is ChatAction.Connect -> state.copy(
+                connectionStatus = ConnectionStatus.CONNECTING,
+                error = null,
+                userName = action.name,
             )
-            val chatUpdate = appendMessageToChat(
-                state = state.copy(
+
+            is ChatAction.Connected -> {
+                val generalDescriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
+                val connectionMessage = makeMessage(
+                    type = MessageType.INFO,
+                    sender = "Сервер",
+                    text = "Подключение установлено",
+                )
+                val baseState = state.copy(
+                    screen = Screen.CHAT,
+                    connectionStatus = ConnectionStatus.CONNECTED,
+                    userName = action.name,
+                    error = null,
                     chats = emptyMap(),
                     chatOrder = emptyList(),
                     activeChatId = GENERAL_CHAT_ID,
+                    clients = listOf(action.name),
+                    onlineClients = setOf(action.name),
+                    clientPlatforms = mapOf(action.name to ClientPlatform.ANDROID),
                     pendingOwnMessages = emptyList(),
-                ),
-                descriptor = generalDescriptor,
-                message = connectionMessage,
-                activate = true,
-            )
+                    groupMode = GroupMode.ALL,
+                    selectedClients = emptySet(),
+                )
+                val chatUpdate = appendMessageToChat(
+                    state = baseState,
+                    descriptor = generalDescriptor,
+                    message = connectionMessage,
+                    activate = true,
+                )
 
-            state.copy(
-                screen = Screen.CHAT,
-                connectionStatus = ConnectionStatus.CONNECTED,
-                userName = action.name,
-                error = null,
-                chats = chatUpdate.chats,
-                chatOrder = chatUpdate.chatOrder,
-                activeChatId = GENERAL_CHAT_ID,
-                clients = if (state.clients.isEmpty()) listOf(action.name) else state.clients,
-                clientPlatforms = state.clientPlatforms + mapOf(action.name to ClientPlatform.ANDROID),
-                pendingOwnMessages = emptyList(),
-                groupMode = GroupMode.ALL,
-                selectedClients = emptySet(),
-            )
-        }
+                baseState.copy(
+                    chats = chatUpdate.chats,
+                    chatOrder = chatUpdate.chatOrder,
+                    activeChatId = GENERAL_CHAT_ID,
+                )
+            }
 
-        ChatAction.Disconnected -> initialState
+            ChatAction.Disconnected -> initialState
 
-        is ChatAction.MessageReceived -> {
-            val descriptor = getDescriptorFromIncoming(
-                currentUser = state.userName,
-                sender = action.sender,
-                mode = action.mode,
-                targets = action.targets,
-            )
+            is ChatAction.MessageReceived -> {
+                val descriptor = getDescriptorFromIncoming(
+                    currentUser = state.userName,
+                    sender = action.sender,
+                    mode = action.mode,
+                    targets = action.targets,
+                )
 
-            if (action.sender == state.userName) {
-                val pendingIndex = state.pendingOwnMessages.indexOfFirst { pending ->
-                    pending.chatId == descriptor.id && pending.text == action.text
+                if (action.sender == state.userName) {
+                    val pendingIndex = state.pendingOwnMessages.indexOfFirst { pending ->
+                        pending.chatId == descriptor.id && pending.text == action.text
+                    }
+                    if (pendingIndex != -1) {
+                        return state.copy(
+                            pendingOwnMessages = state.pendingOwnMessages.filterIndexed { index, _ ->
+                                index != pendingIndex
+                            },
+                        )
+                    }
                 }
-                if (pendingIndex != -1) {
+
+                val chatUpdate = appendMessageToChat(
+                    state = state,
+                    descriptor = descriptor,
+                    message = makeMessage(
+                        type = if (action.sender == state.userName) MessageType.OWN else MessageType.OTHER,
+                        sender = action.sender,
+                        text = action.text,
+                        timestampMillis = action.timestampMillis,
+                    ),
+                    markUnread = state.activeChatId != descriptor.id,
+                )
+
+                state.copy(
+                    chats = chatUpdate.chats,
+                    chatOrder = chatUpdate.chatOrder,
+                )
+            }
+
+            is ChatAction.HistorySynced -> {
+                var nextState = state
+
+                action.messages
+                    .sortedBy(HistoryMessage::timestampMillis)
+                    .forEach { message ->
+                        val descriptor = getDescriptorFromIncoming(
+                            currentUser = nextState.userName,
+                            sender = message.sender,
+                            mode = message.mode,
+                            targets = message.targets,
+                        )
+                        val update = appendMessageToChat(
+                            state = nextState,
+                            descriptor = descriptor,
+                            message = makeMessage(
+                                type = if (message.sender == nextState.userName) {
+                                    MessageType.OWN
+                                } else {
+                                    MessageType.OTHER
+                                },
+                                sender = message.sender,
+                                text = message.text,
+                                timestampMillis = message.timestampMillis,
+                            ),
+                            markUnread = false,
+                        )
+                        nextState = nextState.copy(
+                            chats = update.chats,
+                            chatOrder = update.chatOrder,
+                        )
+                    }
+
+                nextState
+            }
+
+            is ChatAction.ClientsUpdated -> {
+                val uniqueOnlineClients = action.clients.distinct()
+                val otherOnlineClients = uniqueOnlineClients.filter { it != state.userName }
+                val preservedRecipients = getReferencedRecipients(state)
+                    .filter { it != state.userName && it !in otherOnlineClients }
+                val nextVisibleRecipients = sortNames(otherOnlineClients + preservedRecipients)
+                val nextClients = if (state.userName.isNotBlank()) {
+                    listOf(state.userName) + nextVisibleRecipients
+                } else {
+                    nextVisibleRecipients
+                }
+                val nextClientSet = nextClients.toSet()
+                val previousOnlineClients = state.onlineClients
+                val nextOnlineClients = buildSet {
+                    addAll(uniqueOnlineClients)
+                    if (state.userName.isNotBlank()) {
+                        add(state.userName)
+                    }
+                }
+                val joined = otherOnlineClients.filter { client ->
+                    client !in previousOnlineClients
+                }
+                val left = previousOnlineClients.filter { client ->
+                    client != state.userName && client !in nextOnlineClients
+                }
+
+                var nextState = state.copy(
+                    clients = nextClients,
+                    onlineClients = nextOnlineClients,
+                    clientPlatforms = state.clientPlatforms.filterKeys(nextClientSet::contains),
+                )
+
+                joined.forEach { name ->
+                    val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
+                    val update = appendMessageToChat(
+                        state = nextState,
+                        descriptor = descriptor,
+                        message = makeMessage(MessageType.INFO, "Сервер", "$name присоединился"),
+                        markUnread = nextState.activeChatId != descriptor.id,
+                    )
+                    nextState = nextState.copy(
+                        chats = update.chats,
+                        chatOrder = update.chatOrder,
+                    )
+                }
+
+                left.forEach { name ->
+                    val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
+                    val update = appendMessageToChat(
+                        state = nextState,
+                        descriptor = descriptor,
+                        message = makeMessage(MessageType.INFO, "Сервер", "$name отключился"),
+                        markUnread = nextState.activeChatId != descriptor.id,
+                    )
+                    nextState = nextState.copy(
+                        chats = update.chats,
+                        chatOrder = update.chatOrder,
+                    )
+                }
+
+                val nextSelectedClients = when (nextState.groupMode) {
+                    GroupMode.ALL -> nextState.onlineClients.filter { it != nextState.userName }.toSet()
+                    GroupMode.NONE -> emptySet()
+                    GroupMode.CUSTOM -> nextState.selectedClients.filter { name ->
+                        name != nextState.userName && name in nextClientSet
+                    }.toSet()
+                }
+
+                nextState.copy(
+                    clientPlatforms = buildMap {
+                        putAll(nextState.clientPlatforms)
+                        if (nextState.userName.isNotBlank()) {
+                            put(nextState.userName, ClientPlatform.ANDROID)
+                        }
+                    },
+                    selectedClients = nextSelectedClients,
+                )
+            }
+
+            is ChatAction.ClientPlatformsUpdated -> {
+                val visibleClients = buildSet {
+                    addAll(state.clients)
+                    if (state.userName.isNotBlank()) {
+                        add(state.userName)
+                    }
+                }
+                val nextPlatforms = state.clientPlatforms.toMutableMap()
+
+                action.platforms.forEach { (name, platform) ->
+                    if (name in visibleClients) {
+                        nextPlatforms[name] = platform
+                    }
+                }
+
+                if (state.userName.isNotBlank() && state.userName !in nextPlatforms) {
+                    nextPlatforms[state.userName] = ClientPlatform.ANDROID
+                }
+
+                state.copy(clientPlatforms = nextPlatforms)
+            }
+
+            is ChatAction.InfoReceived -> {
+                val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
+                val update = appendMessageToChat(
+                    state = state,
+                    descriptor = descriptor,
+                    message = makeMessage(MessageType.INFO, "Сервер", action.text),
+                    markUnread = state.activeChatId != descriptor.id,
+                )
+                state.copy(
+                    chats = update.chats,
+                    chatOrder = update.chatOrder,
+                )
+            }
+
+            is ChatAction.ErrorReceived -> {
+                if (state.screen == Screen.LOGIN) {
                     return state.copy(
-                        pendingOwnMessages = state.pendingOwnMessages.filterIndexed { index, _ ->
-                            index != pendingIndex
-                        },
+                        connectionStatus = ConnectionStatus.DISCONNECTED,
+                        error = action.text,
+                    )
+                }
+
+                val activeChat = state.activeChatId?.let(state.chats::get)
+                if (activeChat != null) {
+                    val descriptor = makeChatDescriptor(activeChat.kind, activeChat.participants)
+                    val update = appendMessageToChat(
+                        state = state,
+                        descriptor = descriptor,
+                        message = makeMessage(MessageType.ERROR, "Ошибка", action.text),
+                        activate = true,
+                    )
+                    return state.copy(
+                        chats = update.chats,
+                        chatOrder = update.chatOrder,
+                    )
+                }
+
+                state.copy(error = action.text)
+            }
+
+            is ChatAction.SendMessage -> {
+                val descriptor = getDescriptorFromOutgoing(
+                    mode = action.mode,
+                    targets = action.targets,
+                )
+                val update = appendMessageToChat(
+                    state = state,
+                    descriptor = descriptor,
+                    message = makeMessage(MessageType.OWN, state.userName, action.text),
+                    activate = true,
+                )
+
+                state.copy(
+                    chats = update.chats,
+                    chatOrder = update.chatOrder,
+                    activeChatId = descriptor.id,
+                    pendingOwnMessages = state.pendingOwnMessages + PendingOwnMessage(
+                        chatId = descriptor.id,
+                        text = action.text,
+                    ),
+                    groupMode = action.mode,
+                    selectedClients = if (action.mode == GroupMode.ALL) {
+                        state.onlineClients.filter { it != state.userName }.toSet()
+                    } else {
+                        action.targets.toSet()
+                    },
+                )
+            }
+
+            is ChatAction.SetGroup -> {
+                if (state.groupMode == action.mode && setsEqual(state.selectedClients, action.selected)) {
+                    state
+                } else {
+                    state.copy(
+                        groupMode = action.mode,
+                        selectedClients = action.selected,
                     )
                 }
             }
 
-            val chatUpdate = appendMessageToChat(
-                state = state,
-                descriptor = descriptor,
-                message = makeMessage(
-                    type = if (action.sender == state.userName) MessageType.OWN else MessageType.OTHER,
-                    sender = action.sender,
-                    text = action.text,
-                ),
-                markUnread = state.activeChatId != descriptor.id,
-            )
-
-            state.copy(
-                chats = chatUpdate.chats,
-                chatOrder = chatUpdate.chatOrder,
-            )
-        }
-
-        is ChatAction.ClientsUpdated -> {
-            val uniqueClients = action.clients.distinct()
-            val nextClients = if (state.userName.isNotBlank()) {
-                listOf(state.userName) + uniqueClients.filter { it != state.userName }
-            } else {
-                uniqueClients
-            }
-            val previousClients = state.clients.toSet()
-            val nextClientSet = nextClients.toSet()
-            val joined = nextClients.filter { client ->
-                client != state.userName && client !in previousClients
-            }
-            val left = state.clients.filter { client ->
-                client != state.userName && client !in nextClientSet
-            }
-
-            var nextState = state.copy(
-                clients = nextClients,
-                clientPlatforms = state.clientPlatforms.filterKeys(nextClientSet::contains),
-            )
-
-            joined.forEach { name ->
-                val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
-                val update = appendMessageToChat(
-                    state = nextState,
-                    descriptor = descriptor,
-                    message = makeMessage(MessageType.INFO, "Сервер", "$name присоединился"),
-                    markUnread = nextState.activeChatId != descriptor.id,
-                )
-                nextState = nextState.copy(
-                    chats = update.chats,
-                    chatOrder = update.chatOrder,
-                )
-            }
-
-            left.forEach { name ->
-                val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
-                val update = appendMessageToChat(
-                    state = nextState,
-                    descriptor = descriptor,
-                    message = makeMessage(MessageType.INFO, "Сервер", "$name отключился"),
-                    markUnread = nextState.activeChatId != descriptor.id,
-                )
-                nextState = nextState.copy(
-                    chats = update.chats,
-                    chatOrder = update.chatOrder,
-                )
-            }
-
-            val nextSelectedClients = when (nextState.groupMode) {
-                GroupMode.ALL -> nextClients.filter { it != nextState.userName }.toSet()
-                GroupMode.NONE -> emptySet()
-                GroupMode.CUSTOM -> nextState.selectedClients.filter { name ->
-                    name != nextState.userName && name in nextClientSet
-                }.toSet()
-            }
-
-            nextState.copy(
-                clientPlatforms = buildMap {
-                    putAll(nextState.clientPlatforms)
-                    if (nextState.userName.isNotBlank()) {
-                        put(nextState.userName, ClientPlatform.ANDROID)
-                    }
-                },
-                selectedClients = nextSelectedClients,
-            )
-        }
-
-        is ChatAction.ClientPlatformsUpdated -> {
-            val visibleClients = buildSet {
-                addAll(state.clients)
-                if (state.userName.isNotBlank()) {
-                    add(state.userName)
-                }
-            }
-            val nextPlatforms = state.clientPlatforms.toMutableMap()
-
-            action.platforms.forEach { (name, platform) ->
-                if (name in visibleClients) {
-                    nextPlatforms[name] = platform
-                }
-            }
-
-            if (state.userName.isNotBlank() && state.userName !in nextPlatforms) {
-                nextPlatforms[state.userName] = ClientPlatform.ANDROID
-            }
-
-            state.copy(clientPlatforms = nextPlatforms)
-        }
-
-        is ChatAction.InfoReceived -> {
-            val descriptor = makeChatDescriptor(ChatContextKind.GENERAL, emptyList())
-            val update = appendMessageToChat(
-                state = state,
-                descriptor = descriptor,
-                message = makeMessage(MessageType.INFO, "Сервер", action.text),
-                markUnread = state.activeChatId != descriptor.id,
-            )
-            state.copy(
-                chats = update.chats,
-                chatOrder = update.chatOrder,
-            )
-        }
-
-        is ChatAction.ErrorReceived -> {
-            if (state.screen == Screen.LOGIN) {
-                return state.copy(
-                    connectionStatus = ConnectionStatus.DISCONNECTED,
-                    error = action.text,
-                )
-            }
-
-            val activeChat = state.activeChatId?.let(state.chats::get)
-            if (activeChat != null) {
-                val descriptor = makeChatDescriptor(activeChat.kind, activeChat.participants)
-                val update = appendMessageToChat(
+            is ChatAction.SwitchChat -> {
+                val chat = state.chats[action.chatId] ?: return state
+                val update = upsertChat(
                     state = state,
-                    descriptor = descriptor,
-                    message = makeMessage(MessageType.ERROR, "Ошибка", action.text),
+                    descriptor = makeChatDescriptor(chat.kind, chat.participants),
                     activate = true,
+                    clearUnread = true,
                 )
-                return state.copy(
+                state.copy(
                     chats = update.chats,
                     chatOrder = update.chatOrder,
+                    activeChatId = action.chatId,
+                    groupMode = getGroupModeForChat(chat),
+                    selectedClients = getSelectedClientsForChat(state, chat),
                 )
             }
 
-            state.copy(error = action.text)
-        }
-
-        is ChatAction.SendMessage -> {
-            val descriptor = getDescriptorFromOutgoing(
-                mode = action.mode,
-                targets = action.targets,
+            is ChatAction.SetError -> state.copy(
+                error = action.error,
+                connectionStatus = ConnectionStatus.DISCONNECTED,
             )
-            val update = appendMessageToChat(
-                state = state,
-                descriptor = descriptor,
-                message = makeMessage(MessageType.OWN, state.userName, action.text),
-                activate = true,
-            )
-
-            state.copy(
-                chats = update.chats,
-                chatOrder = update.chatOrder,
-                activeChatId = descriptor.id,
-                pendingOwnMessages = state.pendingOwnMessages + PendingOwnMessage(
-                    chatId = descriptor.id,
-                    text = action.text,
-                ),
-                groupMode = action.mode,
-                selectedClients = if (action.mode == GroupMode.ALL) {
-                    state.clients.filter { it != state.userName }.toSet()
-                } else {
-                    action.targets.toSet()
-                },
-            )
-        }
-
-        is ChatAction.SetGroup -> {
-            if (state.groupMode == action.mode && setsEqual(state.selectedClients, action.selected)) {
-                state
-            } else {
-                state.copy(
-                    groupMode = action.mode,
-                    selectedClients = action.selected,
-                )
-            }
-        }
-
-        is ChatAction.SwitchChat -> {
-            val chat = state.chats[action.chatId] ?: return state
-            val update = upsertChat(
-                state = state,
-                descriptor = makeChatDescriptor(chat.kind, chat.participants),
-                activate = true,
-                clearUnread = true,
-            )
-            state.copy(
-                chats = update.chats,
-                chatOrder = update.chatOrder,
-                activeChatId = action.chatId,
-                groupMode = getGroupModeForChat(chat),
-                selectedClients = getSelectedClientsForChat(state, chat),
-            )
-        }
-
-        is ChatAction.SetError -> state.copy(
-            error = action.error,
-            connectionStatus = ConnectionStatus.DISCONNECTED,
-        )
         }
     }
 
@@ -306,11 +355,13 @@ object ChatReducer {
         type: MessageType,
         sender: String,
         text: String,
+        timestampMillis: Long = System.currentTimeMillis(),
     ): MessageItem = MessageItem(
         id = UUID.randomUUID().toString(),
         type = type,
         sender = sender,
         text = text,
+        timestampMillis = timestampMillis,
     )
 
     private fun setsEqual(a: Set<String>, b: Set<String>): Boolean {
@@ -429,6 +480,15 @@ object ChatReducer {
             .sortedByDescending { it.lastActivityAt }
             .map { it.id }
 
+    private fun getReferencedRecipients(state: ChatState): Set<String> = buildSet {
+        state.chats.values
+            .filter { it.kind == ChatContextKind.GROUP }
+            .forEach { chat ->
+                addAll(chat.participants.filter { it != state.userName })
+            }
+        addAll(state.selectedClients.filter { it != state.userName })
+    }
+
     private fun appendMessageToChat(
         state: ChatState,
         descriptor: ChatDescriptor,
@@ -438,13 +498,13 @@ object ChatReducer {
     ): ChatUpdate {
         val current = ensureChat(state.chats, descriptor)
         val updatedChat = current.copy(
-            messages = current.messages + message,
+            messages = (current.messages + message).sortedBy(MessageItem::timestampMillis),
             hasUnread = if (activate) {
                 false
             } else {
                 current.hasUnread || markUnread
             },
-            lastActivityAt = System.currentTimeMillis(),
+            lastActivityAt = maxOf(current.lastActivityAt, message.timestampMillis),
         )
 
         val chats = state.chats + (descriptor.id to updatedChat)
@@ -477,11 +537,11 @@ object ChatReducer {
         state: ChatState,
         chat: ChatContext,
     ): Set<String> {
-        val availableRecipients = state.clients.filter { it != state.userName }.toSet()
+        val visibleRecipients = state.clients.filter { it != state.userName }.toSet()
         return when (chat.kind) {
-            ChatContextKind.GENERAL -> availableRecipients
+            ChatContextKind.GENERAL -> state.onlineClients.filter { it != state.userName }.toSet()
             ChatContextKind.SELF -> emptySet()
-            ChatContextKind.GROUP -> chat.participants.filter { it in availableRecipients }.toSet()
+            ChatContextKind.GROUP -> chat.participants.filter { it in visibleRecipients }.toSet()
         }
     }
 

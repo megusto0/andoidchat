@@ -118,10 +118,9 @@ fun LoginScreen(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth()
-                .imePadding()
+                .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Surface(
@@ -367,11 +366,16 @@ private fun MessengerField(
         )
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = TextPrimary,
+            ),
             placeholder = {
                 Text(
                     text = placeholder,
@@ -384,11 +388,15 @@ private fun MessengerField(
                 unfocusedContainerColor = InputSurface,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary,
+                disabledTextColor = TextPrimary,
                 focusedBorderColor = Accent,
                 unfocusedBorderColor = BorderSoft,
+                disabledBorderColor = BorderSoft,
                 cursorColor = Accent,
                 focusedPlaceholderColor = TextMuted,
                 unfocusedPlaceholderColor = TextMuted,
+                focusedLabelColor = TextSecondary,
+                unfocusedLabelColor = TextSecondary,
             ),
         )
     }

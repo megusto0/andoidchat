@@ -46,6 +46,7 @@ object MessengerProtocol {
                     .filter { it.isNotEmpty() },
             )
             "CLIENTS_META" -> ServerEvent.ClientPlatforms(parseClientPlatforms(payload))
+            "SYNC_HISTORY" -> ServerEvent.SyncHistory(parseHistoryMessages(payload))
             "MESSAGE" -> parseMessagePayload(payload)
             else -> ServerEvent.Info("$command|$payload")
         }
@@ -91,6 +92,7 @@ object MessengerProtocol {
                     text = content,
                     mode = GroupMode.fromProtocolValue(parsed.optString("mode")),
                     targets = targets,
+                    timestampMillis = parsed.optLong("timestamp", System.currentTimeMillis()),
                 )
             }
         } catch (_: JSONException) {
@@ -104,6 +106,7 @@ object MessengerProtocol {
                 text = decodeEscapedText(payload),
                 mode = GroupMode.ALL,
                 targets = emptyList(),
+                timestampMillis = System.currentTimeMillis(),
             )
         } else {
             ServerEvent.Message(
@@ -111,7 +114,45 @@ object MessengerProtocol {
                 text = decodeEscapedText(payload.substring(pipeIndex + 1)),
                 mode = GroupMode.ALL,
                 targets = emptyList(),
+                timestampMillis = System.currentTimeMillis(),
             )
+        }
+    }
+
+    private fun parseHistoryMessages(payload: String): List<HistoryMessage> {
+        return try {
+            val root = JSONObject(payload)
+            val rawMessages = root.optJSONArray("messages") ?: JSONArray()
+            buildList {
+                for (index in 0 until rawMessages.length()) {
+                    val raw = rawMessages.optJSONObject(index) ?: continue
+                    val sender = raw.optString("sender")
+                    val text = raw.optString("content")
+                    if (sender.isBlank() || text.isBlank()) continue
+
+                    val targets = buildList {
+                        val rawTargets = raw.optJSONArray("targets") ?: JSONArray()
+                        for (targetIndex in 0 until rawTargets.length()) {
+                            val value = rawTargets.optString(targetIndex)
+                            if (value.isNotBlank()) {
+                                add(value)
+                            }
+                        }
+                    }
+
+                    add(
+                        HistoryMessage(
+                            sender = sender,
+                            text = text,
+                            mode = GroupMode.fromProtocolValue(raw.optString("mode")),
+                            targets = targets,
+                            timestampMillis = raw.optLong("timestamp", System.currentTimeMillis()),
+                        ),
+                    )
+                }
+            }
+        } catch (_: JSONException) {
+            emptyList()
         }
     }
 

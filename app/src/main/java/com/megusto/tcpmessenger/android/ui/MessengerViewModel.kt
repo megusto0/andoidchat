@@ -114,7 +114,7 @@ class MessengerViewModel : ViewModel() {
 
     fun selectAllRecipients() {
         val snapshot = _state.value
-        val otherClients = snapshot.clients.filter { it != snapshot.userName }.toSet()
+        val otherClients = snapshot.onlineClients.filter { it != snapshot.userName }.toSet()
         dispatch(ChatAction.SetGroup(GroupMode.ALL, otherClients))
     }
 
@@ -135,7 +135,7 @@ class MessengerViewModel : ViewModel() {
         if (name == snapshot.userName) return
 
         val nextSelection = if (snapshot.groupMode == GroupMode.ALL) {
-            snapshot.clients.filter { it != snapshot.userName }.toMutableSet()
+            snapshot.onlineClients.filter { it != snapshot.userName }.toMutableSet()
         } else {
             snapshot.selectedClients.toMutableSet()
         }
@@ -154,7 +154,7 @@ class MessengerViewModel : ViewModel() {
     }
 
     private fun currentTargets(state: ChatState): List<String> = when (state.groupMode) {
-        GroupMode.ALL -> state.clients
+        GroupMode.ALL -> state.onlineClients
             .filter { it != state.userName }
             .sortedWith(java.util.Comparator { left, right -> collator.compare(left, right) })
 
@@ -175,8 +175,10 @@ class MessengerViewModel : ViewModel() {
                     text = event.text,
                     mode = event.mode,
                     targets = event.targets,
+                    timestampMillis = event.timestampMillis,
                 ),
             )
+            is ServerEvent.SyncHistory -> dispatch(ChatAction.HistorySynced(event.messages))
 
             is ServerEvent.Clients -> dispatch(ChatAction.ClientsUpdated(event.names))
             is ServerEvent.ClientPlatforms -> dispatch(ChatAction.ClientPlatformsUpdated(event.platforms))

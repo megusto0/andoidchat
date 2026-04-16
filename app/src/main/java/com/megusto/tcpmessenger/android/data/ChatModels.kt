@@ -39,6 +39,14 @@ data class PendingOwnMessage(
     val text: String,
 )
 
+data class HistoryMessage(
+    val sender: String,
+    val text: String,
+    val mode: GroupMode,
+    val targets: List<String>,
+    val timestampMillis: Long,
+)
+
 enum class GroupMode {
     ALL,
     NONE,
@@ -94,6 +102,7 @@ data class ChatState(
     val chatOrder: List<String> = emptyList(),
     val activeChatId: String? = null,
     val clients: List<String> = emptyList(),
+    val onlineClients: Set<String> = emptySet(),
     val clientPlatforms: Map<String, ClientPlatform> = emptyMap(),
     val pendingOwnMessages: List<PendingOwnMessage> = emptyList(),
     val groupMode: GroupMode = GroupMode.ALL,
@@ -119,6 +128,11 @@ sealed interface ChatAction {
         val text: String,
         val mode: GroupMode,
         val targets: List<String>,
+        val timestampMillis: Long = System.currentTimeMillis(),
+    ) : ChatAction
+
+    data class HistorySynced(
+        val messages: List<HistoryMessage>,
     ) : ChatAction
 
     data class ClientsUpdated(
@@ -161,11 +175,13 @@ sealed interface ServerEvent {
     data class LoginOk(val name: String) : ServerEvent
     data class Info(val text: String) : ServerEvent
     data class Error(val text: String) : ServerEvent
+    data class SyncHistory(val messages: List<HistoryMessage>) : ServerEvent
     data class Message(
         val sender: String,
         val text: String,
         val mode: GroupMode,
         val targets: List<String>,
+        val timestampMillis: Long,
     ) : ServerEvent
 
     data class Clients(val names: List<String>) : ServerEvent
