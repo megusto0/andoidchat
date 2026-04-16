@@ -1,0 +1,16 @@
+megusto@megusto-server:~/claude/lab$ python3 client.py 127.0.0.1 5000
+Введите имя клиента: y
+^CTraceback (most recent call last):
+  File "/home/megusto/claude/lab/client.py", line 526, in <module>
+    main()
+  File "/home/megusto/claude/lab/client.py", line 447, in main
+    set_input_prompt(client_name)
+  File "/home/megusto/claude/lab/client.py", line 57, in set_input_prompt
+    console_state["prompt"] = get_input_prompt(client_name)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/megusto/claude/lab/client.py", line 40, in get_input_prompt
+    with print_lock:
+KeyboardInterrupt
+
+megusto@megusto-server:~/claude/lab$ 
+

@@ -1,35 +1,53 @@
-# Android Client
+# TCP Messenger Monorepo
 
-This is a standalone Android Kotlin client for the TCP messenger server in the repo root.
+This repository contains the full TCP Messenger project in a monorepo layout.
 
-## Requirements
+## Structure
 
-- Android Studio Koala or newer
-- Android SDK 35
-- JDK 17
-
-## Run
-
-1. Start the TCP server from the repo root:
-
-```bash
-python3 server_async.py 5000
+```text
+apps/
+  android/   Android Kotlin client
+  desktop/   React + Tauri desktop client
+services/
+  tcp-server/ Python TCP server with UDP discovery
+tools/
+  cli-client/ Python CLI client
+  load-test/  Python load test utility
+docs/
+  notes/      task notes and scratch docs
 ```
 
-2. Open `android-client/` in Android Studio.
-3. Let Studio install the Android SDK/Gradle components it requests.
-4. Run the `app` configuration on an emulator or device.
+## Quick Start
 
-## What it supports
+Start the server:
 
-- `LOGIN|name`, `LIST|`, `QUIT|`
-- JSON `MESSAGE|...` payloads with `mode`, `targets`, `content`
-- General / Self / Group chat contexts
-- Chat bubbles above the composer for switching contexts
-- Clickable recipient rows instead of checkboxes
-- Targeted sends handled by the existing Python server
+```bash
+npm run server:start
+```
 
-## Notes
+Build the desktop frontend:
 
-- This machine does not have the Android SDK installed, so the project could not be assembled locally here.
-- The Android client intentionally mirrors the current desktop protocol and reducer logic instead of embedding the Tauri frontend.
+```bash
+npm run desktop:install
+npm run desktop:build
+```
+
+Run the desktop app:
+
+```bash
+npm run desktop:tauri
+```
+
+Build the Android client:
+
+```bash
+npm run android:build
+```
+
+## Direct Paths
+
+- Android app: `apps/android`
+- Desktop app: `apps/desktop`
+- Server: `services/tcp-server/server_async.py`
+- CLI client: `tools/cli-client/client.py`
+- Load test: `tools/load-test/load_test.py`

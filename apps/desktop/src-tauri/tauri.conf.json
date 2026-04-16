@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-dev/tauri-v2/main/core/tauri-config-schema/schema.json",
+  "productName": "TCP Messenger",
+  "version": "0.1.0",
+  "identifier": "com.messenger.tcp",
+  "build": {
+    "beforeDevCommand": "node scripts/ensure-vite-dev.mjs",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TCP Messenger",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 500,
+        "minHeight": 400,
+        "decorations": true
+      }
+    ]
+  }
+}

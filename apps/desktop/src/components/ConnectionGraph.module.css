@@ -1,0 +1,73 @@
+/* ConnectionGraph — SVG-визуализация подключений */
+
+.container {
+  width: 100%;
+  aspect-ratio: 5/4;
+  max-height: 240px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.svg {
+  width: 100%;
+  height: 100%;
+}
+
+.serverNode {
+  fill: var(--accent);
+  filter: drop-shadow(0 2px 4px rgba(200, 148, 62, 0.3));
+}
+
+.serverLabel {
+  fill: var(--text-on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.botNode {
+  transition: fill 300ms, r 200ms;
+}
+
+.botNodeConnecting {
+  fill: #eab308;
+}
+
+.botNodeActive {
+  fill: var(--success);
+}
+
+.botNodeDone {
+  fill: var(--text-tertiary);
+}
+
+.botNodeError {
+  fill: var(--error);
+}
+
+.line {
+  stroke: var(--border);
+  stroke-width: 0.5;
+  opacity: 0.4;
+}
+
+.pulse {
+  animation: pulseLine 600ms ease-out;
+}
+
+@keyframes pulseLine {
+  0% {
+    stroke: var(--accent);
+    stroke-width: 2;
+    opacity: 1;
+  }
+  100% {
+    stroke: var(--border);
+    stroke-width: 0.5;
+    opacity: 0.4;
+  }
+}

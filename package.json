@@ -1,0 +1,15 @@
+{
+  "name": "tcp-messenger-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "desktop:install": "npm --prefix apps/desktop install",
+    "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:build": "npm --prefix apps/desktop run build",
+    "desktop:tauri": "cd apps/desktop && npx tauri dev",
+    "server:start": "python3 services/tcp-server/server_async.py 5000",
+    "android:build": "cd apps/android && ./gradlew :app:assembleDebug",
+    "cli:start": "python3 tools/cli-client/client.py 127.0.0.1 5000",
+    "load:test": "python3 tools/load-test/load_test.py --host 127.0.0.1 --port 5000 --clients 60"
+  }
+}

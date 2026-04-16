@@ -1,0 +1,182 @@
+/* MessageBubble — пузырь сообщения */
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  animation: slideUp 180ms var(--ease-out) forwards;
+}
+
+/* Группировка: плотный режим для подряд идущих */
+.rowGrouped {
+  padding-top: 0;
+}
+
+.rowSpaced {
+  padding-top: 10px;
+}
+
+.rowOwn {
+  justify-content: flex-end;
+}
+
+.rowOther {
+  justify-content: flex-start;
+}
+
+/* Аватар собеседника */
+.avatarSmall {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
+.avatarPlaceholder {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.bubbleWrap {
+  max-width: min(680px, 70%);
+  min-width: 96px;
+}
+
+.sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  opacity: 0.85;
+  margin-bottom: 3px;
+  margin-left: 2px;
+  letter-spacing: 0.02em;
+}
+
+.bubble {
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  position: relative;
+}
+
+.bubbleOwn {
+  background: var(--bg-own-message);
+  color: var(--text-on-own);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+}
+
+/* Asymmetric corners for grouping */
+.bubbleOwnFirst {
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+}
+
+.bubbleOwnMiddle {
+  border-radius: var(--radius-lg) 4px 4px var(--radius-lg);
+}
+
+.bubbleOwnLast {
+  border-radius: var(--radius-lg) 4px var(--radius-xs) var(--radius-lg);
+}
+
+.bubbleOther {
+  background: var(--bg-other-message);
+  color: var(--text-primary);
+  border-radius: var(--radius-xs) var(--radius-lg) var(--radius-lg) var(--radius-lg);
+}
+
+.bubbleOtherFirst {
+  border-radius: var(--radius-xs) var(--radius-lg) var(--radius-lg) var(--radius-lg);
+}
+
+.bubbleOtherMiddle {
+  border-radius: 4px var(--radius-lg) var(--radius-lg) 4px;
+}
+
+.bubbleOtherLast {
+  border-radius: 4px var(--radius-lg) var(--radius-lg) var(--radius-xs);
+}
+
+.text {
+  margin-bottom: 2px;
+}
+
+.time {
+  display: block;
+  font-size: 10px;
+  text-align: right;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.timeOwn {
+  color: rgba(24, 24, 27, 0.45);
+}
+
+.timeOther {
+  color: var(--text-muted);
+}
+
+.timeHidden {
+  display: none;
+}
+
+/* Системные сообщения */
+.systemRow {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.systemBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  background: var(--info-bg);
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.systemError {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+/* Server message bubble */
+.bubbleServer {
+  background: #2d3748;
+  color: var(--text-primary);
+  border: 1px solid rgba(122, 167, 232, 0.3);
+}
+
+.avatarServer {
+  background: #2d3748;
+  color: var(--info);
+}
+
+.senderServer {
+  color: var(--info);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.senderIcon {
+  flex-shrink: 0;
+}

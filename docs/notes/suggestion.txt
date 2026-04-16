@@ -1,0 +1,358 @@
+TCP MESSENGER UI/UX REVIEW AND IMPROVEMENT REQUIREMENTS
+
+Based on the current screenshot, the application does not yet look or behave like a polished messenger. The design should be much more beautiful, accurate, modern, and inspired by claude.ai. It can also use a slightly darker warm theme if it improves contrast and visual quality.
+
+1. Main Problems Visible in the Current UI
+
+1.1. The design is too empty and unfinished
+
+The main chat area is almost completely blank.
+The interface does not feel like a finished messenger.
+There is no visual hierarchy.
+The screen looks like a basic prototype rather than a polished product.
+
+Required improvement:
+Make the interface feel premium, calm, and finished. Use a warm modern background, better spacing, elegant typography, soft shadows, and carefully designed cards.
+
+1.2. The UI does not strongly remind claude.ai
+
+The current design uses a beige background, but it does not yet have the polish of claude.ai.
+The layout is too flat.
+The header, sidebar, message area, and input are not visually balanced.
+
+Required improvement:
+Use claude.ai-inspired visual language:
+- warm cream or warm dark background
+- soft surfaces
+- rounded corners
+- calm amber accent color
+- elegant typography
+- subtle borders
+- gentle shadows
+- minimal but intentional layout
+
+A slightly darker version is acceptable and may look better.
+
+1.3. Typography is weak
+
+The font looks basic.
+Text spacing and letter spacing are not consistent.
+Some labels look too small or too faded.
+The title and sidebar labels do not feel premium.
+
+Required improvement:
+Use a better font stack:
+- Inter
+- SF Pro Display
+- Segoe UI Variable
+- system-ui
+
+Use clear font sizes:
+- App title: 18-22 px
+- Section titles: 11-13 px, uppercase, letter spaced
+- Body text: 14-16 px
+- Message text: 15-16 px
+- Secondary text: 12-13 px
+
+1.4. Sidebar looks unfinished
+
+The sidebar has too much empty space.
+The connected clients section says there are no clients, even though the current user is obviously connected.
+The group controls are visually basic.
+The selected tab looks too harsh and not elegant.
+The update button is large but does not seem meaningful.
+The button should be actually functional and do whaat they supposed to.
+
+Required improvement:
+The sidebar should contain:
+- current user card
+- connection status
+- connected clients list
+- group mode selector
+- selected group list
+- refresh button
+- simulation controls
+- server statistics if needed
+
+The connected clients list must include the current connected user.
+
+1.5. Connected clients logic is broken
+
+The UI shows:
+“Нет подключённых клиентов”
+
+But the app status says:
+“Подключён”
+
+This is logically incorrect.
+
+Required improvement:
+When the user is connected, the clients list must include at least the current user.
+After successful LOGIN_OK, the app should automatically request LIST|.
+The server should send CLIENTS| updates after every connect/disconnect.
+The UI should parse CLIENTS| correctly and update the sidebar.
+
+1.6. Buttons do not look functional
+
+The buttons “Симуляция”, “Отключиться”, “Обновить список”, and group mode buttons do not give a clear feeling of functionality.
+It is unclear whether they are clickable, disabled, active, or broken.
+There is no visible loading state.
+There is no feedback after pressing them.
+
+Required improvement:
+Every button must have:
+- hover state
+- active state
+- disabled state
+- loading state if action is async
+- clear visual response after click
+
+Examples:
+- “Обновить список” should send LIST| and show “Обновлено”
+- “Симуляция” should open a simulation panel or start simulated clients
+- “Отключиться” should close TCP connection and return to login screen
+- group buttons should immediately send GROUP| command
+
+1.7. Group mode logic is unclear
+
+The current group selector has:
+Все / Никто / Выбранные
+
+But there are no clients to select.
+The selected mode “Выбранные” is active even though the selected clients list is empty.
+This can confuse the user.
+
+Required improvement:
+Group mode should work like this:
+- “Все” sends GROUP|all
+- “Никто” sends GROUP|
+- “Выбранные” is disabled until at least one client is selected
+- When selected users change, send GROUP|name1,name2
+- Show a small explanation under the selector
+
+1.8. Chat message layout is broken
+
+The message bubble on the right is too narrow and vertical.
+The text appears stacked letter-by-letter:
+h
+j
+h
+2
+0
+:
+8
+
+This indicates broken message bubble width, wrapping, or layout constraints.
+
+Required improvement:
+Message bubbles must have:
+- minimum width
+- maximum width around 60-70% of chat area
+- normal text wrapping
+- word-break rules only for very long words
+- timestamp below or beside the message
+- sender name for other users
+- own messages aligned right
+- other messages aligned left
+
+Recommended CSS logic:
+- max-width: min(680px, 70%)
+- min-width: 80px
+- white-space: pre-wrap
+- overflow-wrap: break-word
+- word-break: normal
+
+
+
+1.11. Input field is too low priority
+
+The input bar is very plain.
+It does not look like a premium chat input.
+There is no send button.
+There is no visible keyboard hint.
+
+Required improvement:
+Input area should include:
+- rounded text area
+- send button
+- placeholder
+- Enter to send
+- Shift+Enter for new line
+- disabled state when disconnected
+- optional command helper
+
+1.12. No clear visual feedback for server events
+
+Server info, errors, connection changes, client list updates, and group changes are not clearly displayed.
+
+Required improvement:
+Add system messages:
+- connected successfully
+- disconnected
+- group mode changed
+- clients list updated
+- server error
+- simulation started/stopped
+
+2. Required Design Direction
+
+The app must look like a beautiful modern messenger inspired by claude.ai.
+
+Possible light theme:
+
+- Background: #F7F3EA or #FAF7F0
+- Sidebar: #EFE8DC
+- Main surface: #FFFDF8
+- Card surface: #FFFFFF
+- Accent: #D97706 or #C46A12
+- Accent hover: #B85C00
+- Text primary: #1F1B16
+- Text secondary: #736B60
+- Border: rgba(80, 60, 40, 0.12)
+- Error: #B42318
+- Success: #1F8A4C
+
+Possible darker warm theme:
+
+- Background: #1F1B16
+- Sidebar: #29231C
+- Main surface: #242018
+- Card surface: #30291F
+- Accent: #D89545
+- Text primary: #F4EEE4
+- Text secondary: #B8AA98
+- Border: rgba(255, 238, 210, 0.10)
+- Error: #F97066
+- Success: #32D583
+
+3. Required Layout Improvements
+
+3.1. Recommended desktop layout
+
+Use a three-part layout:
+
+LEFT SIDEBAR:
+- App logo/title
+- Current user
+- Connected clients
+- Group mode
+- Simulation controls
+
+CENTER CHAT:
+- Header with server and connection info
+- Scrollable message list
+- Empty state if no messages
+- Input area
+
+RIGHT PANEL, optional:
+- Simulation visualization
+- Active clients count
+- Messages per second
+- Async event loop visualization
+- Logs
+
+3.2. Components can be repositioned
+
+All current positions may be changed.
+Do not preserve the current layout if it harms usability.
+The goal is not to patch the current UI, but to redesign it into a beautiful and logical messenger.
+
+4. Functional Requirements to Fix
+
+4.1. Connection state
+
+The app must distinguish:
+- disconnected
+- connecting
+- connected
+- reconnecting
+- error
+
+4.2. Client list
+
+After connecting:
+- send LOGIN|name
+- wait for LOGIN_OK|name
+- immediately send LIST|
+- update clients on CLIENTS| response
+- include current user in the list
+
+4.3. Group controls
+
+Group controls must send real TCP commands:
+- All -> GROUP|all
+- None -> GROUP|
+- Selected -> GROUP|name1,name2
+
+4.4. Refresh clients button
+
+The refresh button must send:
+LIST|
+
+It must update the sidebar after receiving:
+CLIENTS|...
+
+4.5. Disconnect button
+
+The disconnect button must:
+- send QUIT|
+- close TCP socket
+- clear active connection state
+- return user to login screen or show reconnect option
+
+
+
+6. Message Bubble Requirements
+
+Own message:
+- right aligned
+- warm accent background
+- readable text
+- timestamp
+- max width 70%
+
+Other user message:
+- left aligned
+- white or dark card background
+- sender name above
+- timestamp
+- max width 70%
+
+Server info:
+- centered
+- subtle blue or neutral style
+- no large bubble
+
+Server error:
+- centered
+- red warning style
+- no large bubble
+
+7. Quality Requirements
+
+The final app must feel:
+- finished
+- beautiful
+- logical
+- responsive
+- modern
+- premium
+- suitable for demonstration
+- clearly better than a basic lab interface
+
+The current UI should be treated as a rough prototype, not as the final design.
+
+8. Summary of Most Important Fixes
+
+Critical issues to fix first:
+
+1. Connected clients list is logically broken.
+2. Message bubble width/wrapping is broken.
+3. Buttons do not clearly work or show state.
+4. Group selection is unclear and may send no useful command.
+5. Header contains random/debug text.
+
+7. Design is not polished enough and does not strongly resemble claude.ai.
+9. The layout can and should be redesigned.
+10. Use better typography, spacing, colors, and component hierarchy.
+
