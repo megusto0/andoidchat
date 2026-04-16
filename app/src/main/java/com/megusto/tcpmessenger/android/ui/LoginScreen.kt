@@ -1,5 +1,6 @@
 package com.megusto.tcpmessenger.android.ui
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,7 +64,7 @@ fun LoginScreen(
     status: ConnectionStatus,
     error: String?,
     onConnect: (host: String, port: String, name: String) -> Unit,
-    onDiscoverServer: suspend () -> DiscoveredServer?,
+    onDiscoverServer: suspend (Context) -> DiscoveredServer?,
 ) {
     var host by rememberSaveable { mutableStateOf("10.0.2.2") }
     var port by rememberSaveable { mutableStateOf("5000") }
@@ -76,12 +77,13 @@ fun LoginScreen(
     }
     val connecting = status == ConnectionStatus.CONNECTING
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     suspend fun runDiscovery(forceApply: Boolean) {
         discoveryState = "searching"
         discoveryText = "Ищем TCP-сервер в локальной сети…"
 
-        val discovered = onDiscoverServer()
+        val discovered = onDiscoverServer(context)
         if (discovered != null) {
             if (forceApply || !hostEdited) {
                 host = discovered.host

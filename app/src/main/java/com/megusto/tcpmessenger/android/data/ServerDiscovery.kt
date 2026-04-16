@@ -1,12 +1,16 @@
 package com.megusto.tcpmessenger.android.data
 
+import android.content.Context
+import android.net.wifi.WifiManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.NetworkInterface
 import java.net.SocketTimeoutException
+import java.util.Collections
 import kotlin.math.max
 
 data class DiscoveredServer(
@@ -19,19 +23,25 @@ object ServerDiscovery {
     private const val discoveryRequest = "TCP_MESSENGER_DISCOVER_V1"
     private const val discoveryApp = "tcp-messenger"
 
-    suspend fun discover(timeoutMs: Int = 1_500): DiscoveredServer? = withContext(Dispatchers.IO) {
+    suspend fun discover(
+        context: Context,
+        timeoutMs: Int = 1_500,
+    ): DiscoveredServer? = withContext(Dispatchers.IO) {
         val socket = DatagramSocket().apply {
             broadcast = true
             soTimeout = 250
         }
+        val multicastLock = createMulticastLock(context)
 
         try {
+            multicastLock?.acquire()
             val requestBytes = discoveryRequest.toByteArray(Charsets.UTF_8)
-            val targets = listOf(
+            val targets = linkedSetOf(
                 "255.255.255.255",
                 "10.0.2.2",
                 "127.0.0.1",
             )
+            targets += interfaceBroadcastAddresses()
 
             targets.forEach { host ->
                 runCatching {
@@ -70,8 +80,44 @@ object ServerDiscovery {
 
             null
         } finally {
+            runCatching {
+                if (multicastLock?.isHeld == true) {
+                    multicastLock.release()
+                }
+            }
             socket.close()
         }
+    }
+
+    private fun createMulticastLock(context: Context): WifiManager.MulticastLock? {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            ?: return null
+        return wifiManager.createMulticastLock("tcp-messenger-discovery").apply {
+            setReferenceCounted(false)
+        }
+    }
+
+    private fun interfaceBroadcastAddresses(): Set<String> {
+        val broadcasts = linkedSetOf<String>()
+        val interfaces = runCatching {
+            Collections.list(NetworkInterface.getNetworkInterfaces())
+        }.getOrDefault(emptyList())
+
+        interfaces
+            .asSequence()
+            .filter { iface ->
+                runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false)
+            }
+            .forEach { iface ->
+                iface.interfaceAddresses.forEach { address ->
+                    val broadcast = address.broadcast?.hostAddress
+                    if (broadcast != null) {
+                        broadcasts += broadcast
+                    }
+                }
+            }
+
+        return broadcasts
     }
 
     private fun parseResponse(payload: String, fallbackHost: String): DiscoveredServer? {

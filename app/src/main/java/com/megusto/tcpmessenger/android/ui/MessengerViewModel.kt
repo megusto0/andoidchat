@@ -1,5 +1,6 @@
 package com.megusto.tcpmessenger.android.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.megusto.tcpmessenger.android.data.ChatAction
@@ -66,8 +67,8 @@ class MessengerViewModel : ViewModel() {
         }
     }
 
-    suspend fun discoverServer(): DiscoveredServer? = runCatching {
-        ServerDiscovery.discover()
+    suspend fun discoverServer(context: Context): DiscoveredServer? = runCatching {
+        ServerDiscovery.discover(context)
     }.getOrNull()
 
     fun sendMessage(text: String) {
