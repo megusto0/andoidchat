@@ -694,7 +694,8 @@ private fun MessageBubble(message: MessageItem) {
                     color = Accent,
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
                             text = message.text,
@@ -702,7 +703,6 @@ private fun MessageBubble(message: MessageItem) {
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = timeLabel,
                             color = TextPrimary.copy(alpha = 0.72f),
@@ -742,22 +742,21 @@ private fun MessageBubble(message: MessageItem) {
                         border = BorderStroke(1.dp, BorderSoft),
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text(
                                 text = message.sender,
                                 color = TextSecondary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = message.text,
                                 color = TextPrimary,
                                 fontSize = 15.sp,
                                 lineHeight = 22.sp,
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = timeLabel,
                                 color = TextMuted,
