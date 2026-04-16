@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.SocketTimeoutException
@@ -42,6 +43,7 @@ object ServerDiscovery {
                 "127.0.0.1",
             )
             targets += interfaceBroadcastAddresses()
+            targets += interfaceUnicastTargets()
 
             targets.forEach { host ->
                 runCatching {
@@ -99,25 +101,86 @@ object ServerDiscovery {
 
     private fun interfaceBroadcastAddresses(): Set<String> {
         val broadcasts = linkedSetOf<String>()
-        val interfaces = runCatching {
-            Collections.list(NetworkInterface.getNetworkInterfaces())
-        }.getOrDefault(emptyList())
+        val interfaces = networkInterfaces()
 
-        interfaces
-            .asSequence()
-            .filter { iface ->
-                runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false)
-            }
-            .forEach { iface ->
-                iface.interfaceAddresses.forEach { address ->
-                    val broadcast = address.broadcast?.hostAddress
-                    if (broadcast != null) {
-                        broadcasts += broadcast
-                    }
+        for (iface in interfaces) {
+            val usable = runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false)
+            if (!usable) continue
+
+            for (address in iface.interfaceAddresses) {
+                val broadcast = address.broadcast?.hostAddress
+                if (broadcast != null) {
+                    broadcasts += broadcast
                 }
             }
+        }
 
         return broadcasts
+    }
+
+    private fun interfaceUnicastTargets(): Set<String> {
+        val targets = linkedSetOf<String>()
+
+        for (iface in networkInterfaces()) {
+            val usable = runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false)
+            if (!usable) continue
+
+            for (address in iface.interfaceAddresses) {
+                val inetAddress = address.address as? Inet4Address ?: continue
+                if (inetAddress.isLoopbackAddress) continue
+
+                targets += subnetHostsFor(address)
+            }
+        }
+
+        return targets
+    }
+
+    private fun subnetHostsFor(address: java.net.InterfaceAddress): Set<String> {
+        val inetAddress = address.address as? Inet4Address ?: return emptySet()
+        val prefixLength = address.networkPrefixLength.toInt()
+        val addressInt = ipv4ToInt(inetAddress)
+        val effectivePrefix = when {
+            prefixLength in 24..30 -> prefixLength
+            else -> 24
+        }
+        val hostBits = 32 - effectivePrefix
+        val hostCount = ((1 shl hostBits) - 2).coerceIn(1, 254)
+        val mask = if (effectivePrefix == 0) 0 else (-1 shl hostBits)
+        val networkBase = addressInt and mask
+        val currentHost = addressInt and 0xFF
+        val targets = linkedSetOf<String>()
+
+        for (offset in 1..hostCount) {
+            val candidate = networkBase + offset
+            if ((candidate and 0xFF) == currentHost) {
+                continue
+            }
+            targets += intToIpv4(candidate)
+        }
+
+        return targets
+    }
+
+    private fun networkInterfaces(): List<NetworkInterface> = runCatching {
+        Collections.list(NetworkInterface.getNetworkInterfaces())
+    }.getOrDefault(emptyList())
+
+    private fun ipv4ToInt(address: Inet4Address): Int {
+        val bytes = address.address
+        return ((bytes[0].toInt() and 0xFF) shl 24) or
+            ((bytes[1].toInt() and 0xFF) shl 16) or
+            ((bytes[2].toInt() and 0xFF) shl 8) or
+            (bytes[3].toInt() and 0xFF)
+    }
+
+    private fun intToIpv4(value: Int): String {
+        return listOf(
+            (value ushr 24) and 0xFF,
+            (value ushr 16) and 0xFF,
+            (value ushr 8) and 0xFF,
+            value and 0xFF,
+        ).joinToString(".")
     }
 
     private fun parseResponse(payload: String, fallbackHost: String): DiscoveredServer? {
