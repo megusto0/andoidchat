@@ -62,7 +62,7 @@ class TcpMessengerClient(
             val loginLine = withContext(Dispatchers.IO) { reader.readLine() }
                 ?: throw IOException("Сервер закрыл соединение во время входа.")
             when (val event = MessengerProtocol.parseServerLine(loginLine)) {
-                is ServerEvent.LoginOk -> Unit
+                is ServerEvent.LoginOk -> _events.emit(event)
                 is ServerEvent.Error -> throw IOException(event.text)
                 else -> throw IOException("Некорректный ответ сервера: $loginLine")
             }

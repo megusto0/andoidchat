@@ -58,9 +58,7 @@ class MessengerViewModel : ViewModel() {
         dispatch(ChatAction.Connect(cleanHost, portText, cleanName))
         viewModelScope.launch {
             runCatching { client.connect(cleanHost, port, cleanName) }
-                .onSuccess {
-                    dispatch(ChatAction.Connected(cleanName))
-                }
+                .onSuccess { }
                 .onFailure { error ->
                     dispatch(ChatAction.SetError(error.message ?: "Не удалось подключиться."))
                 }

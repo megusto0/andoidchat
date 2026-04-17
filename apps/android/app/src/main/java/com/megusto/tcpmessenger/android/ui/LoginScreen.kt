@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -158,20 +159,29 @@ private fun LoginScreenContent(
     onConnect: (host: String, port: String, name: String) -> Unit,
     overrideCollapseProgress: Float? = null,
 ) {
-    var autoDiscovery by rememberSaveable { mutableStateOf(true) }
     var ip by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf("5000") }
     var name by rememberSaveable { mutableStateOf("") }
     var prefilledFromDiscovery by rememberSaveable { mutableStateOf(false) }
+    var showManualConnectionFields by rememberSaveable { mutableStateOf(false) }
 
-    // Seed the input fields once on the first successful discovery. Users who
-    // then edit manually won't have their values clobbered by later retries.
-    LaunchedEffect(discoveryState, autoDiscovery) {
-        if (!autoDiscovery || prefilledFromDiscovery) return@LaunchedEffect
-        val found = discoveryState as? DiscoveryUiState.Found ?: return@LaunchedEffect
-        ip = found.ip
-        port = found.port.toString()
-        prefilledFromDiscovery = true
+    LaunchedEffect(discoveryState) {
+        when (val state = discoveryState) {
+            is DiscoveryUiState.Found -> {
+                if (!prefilledFromDiscovery) {
+                    ip = state.ip
+                    port = state.port.toString()
+                    prefilledFromDiscovery = true
+                }
+                showManualConnectionFields = false
+            }
+
+            DiscoveryUiState.NotFound -> {
+                showManualConnectionFields = true
+            }
+
+            DiscoveryUiState.Searching -> Unit
+        }
     }
 
     val effectiveHost = ip.trim()
@@ -223,40 +233,51 @@ private fun LoginScreenContent(
             Spacer(Modifier.height(lerp(28.dp, 16.dp, collapseProgress)))
 
             AnimatedVisibility(
-                visible = autoDiscovery,
-                enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-                exit = shrinkVertically(tween(200)) + fadeOut(tween(180)),
+                visible = true,
+                enter = fadeIn(tween(160)),
+                exit = fadeOut(tween(120)),
             ) {
                 Column {
                     DiscoveryCard(
                         state = discoveryState,
+                        showManualConnectionFields = showManualConnectionFields,
                         onRetry = onRetry,
-                        onDismiss = { autoDiscovery = false },
+                        onToggleManualFields = {
+                            showManualConnectionFields = !showManualConnectionFields
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(20.dp))
                 }
             }
 
-            BoxedTextField(
-                label = "IP-адрес",
-                value = ip,
-                onValueChange = { ip = it },
-                monospace = true,
-                keyboardType = KeyboardType.Uri,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(14.dp))
+            AnimatedVisibility(
+                visible = showManualConnectionFields,
+                enter = expandVertically(tween(180)) + fadeIn(tween(160)),
+                exit = shrinkVertically(tween(140)) + fadeOut(tween(120)),
+            ) {
+                Column {
+                    BoxedTextField(
+                        label = "IP-адрес",
+                        value = ip,
+                        onValueChange = { ip = it },
+                        monospace = true,
+                        keyboardType = KeyboardType.Uri,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(14.dp))
 
-            BoxedTextField(
-                label = "Порт",
-                value = port,
-                onValueChange = { raw -> port = raw.filter(Char::isDigit).take(5) },
-                monospace = true,
-                keyboardType = KeyboardType.Number,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(14.dp))
+                    BoxedTextField(
+                        label = "Порт",
+                        value = port,
+                        onValueChange = { raw -> port = raw.filter(Char::isDigit).take(5) },
+                        monospace = true,
+                        keyboardType = KeyboardType.Number,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                }
+            }
 
             val nameFocusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) {
@@ -276,17 +297,8 @@ private fun LoginScreenContent(
             // the form absorbs slack from the collapsed hero.
             Spacer(Modifier.weight(1f))
 
-            AutoDiscoveryToggle(
-                checked = autoDiscovery,
-                onCheckedChange = { nextOn ->
-                    autoDiscovery = nextOn
-                    if (nextOn) onRetry()
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
             if (!error.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = error,
                     style = MessengerType.BodyMuted,
@@ -407,8 +419,9 @@ private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
 @Composable
 private fun DiscoveryCard(
     state: DiscoveryUiState,
+    showManualConnectionFields: Boolean,
     onRetry: () -> Unit,
-    onDismiss: () -> Unit,
+    onToggleManualFields: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -446,7 +459,10 @@ private fun DiscoveryCard(
                         color = TextPrimary,
                     )
                 }
-                GhostAction(text = "Скрыть", onClick = onDismiss)
+                GhostAction(
+                    text = if (showManualConnectionFields) "Авто" else "Вручную",
+                    onClick = onToggleManualFields,
+                )
             }
 
             DiscoveryUiState.NotFound -> {
@@ -517,14 +533,6 @@ private fun DiscoveryIconBadge(state: DiscoveryUiState) {
                     color = tint,
                     modifier = Modifier.size(20.dp),
                 )
-                // corner pulse dot — same position as the mockup
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp),
-                ) {
-                    PulsingDot(color = Accent, size = 6.dp)
-                }
             }
             DiscoveryUiState.NotFound -> {
                 Icon(
@@ -572,36 +580,6 @@ private fun RadarGlyph(color: Color, modifier: Modifier = Modifier) {
             cap = StrokeCap.Round,
         )
     }
-}
-
-@Composable
-private fun PulsingDot(color: Color, size: Dp) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val scale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse-scale",
-    )
-    val alpha by transition.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pulse-alpha",
-    )
-    Box(
-        modifier = Modifier
-            .size(size)
-            .scale(scale)
-            .alpha(alpha)
-            .background(color, CircleShape),
-    )
 }
 
 @Composable
@@ -653,10 +631,15 @@ private fun BoxedTextField(
         TextStyle(
             fontFamily = FontFamily.Monospace,
             fontSize = 15.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Medium,
         )
     } else {
-        TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Normal)
+        TextStyle(
+            fontSize = 15.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.Normal,
+        )
     }
 
     val inputModifier = Modifier
@@ -681,7 +664,7 @@ private fun BoxedTextField(
                 .clip(shape)
                 .background(MainSurface)
                 .border(1.dp, borderColor, shape)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 11.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             if (value.isEmpty() && !placeholder.isNullOrEmpty() && !focused) {
@@ -695,72 +678,18 @@ private fun BoxedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = baseStyle.copy(color = TextPrimary),
+                textStyle = baseStyle.copy(
+                    color = TextPrimary,
+                    platformStyle = PlatformTextStyle(includeFontPadding = true),
+                ),
                 cursorBrush = SolidColor(Accent),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = keyboardType,
                     imeAction = imeAction,
                 ),
-                modifier = inputModifier,
+                modifier = inputModifier.padding(vertical = 1.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun AutoDiscoveryToggle(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 4.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Автопоиск в сети",
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
-            color = TextSecondary,
-            modifier = Modifier.weight(1f),
-        )
-        PillSwitch(checked = checked)
-    }
-}
-
-@Composable
-private fun PillSwitch(checked: Boolean) {
-    val trackShape = RoundedCornerShape(percent = 50)
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) Accent else ElevatedCard,
-        animationSpec = tween(durationMillis = 180),
-        label = "switch-track",
-    )
-    val knobOffset by animateDpAsState(
-        targetValue = if (checked) 18.dp else 0.dp,
-        animationSpec = tween(durationMillis = 180),
-        label = "switch-knob",
-    )
-    val knobColor = if (checked) Color.White else TextMuted
-
-    Box(
-        modifier = Modifier
-            .width(40.dp)
-            .height(22.dp)
-            .clip(trackShape)
-            .background(trackColor)
-            .border(1.dp, if (checked) AccentBorder else BorderSoft, trackShape)
-            .padding(2.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = knobOffset)
-                .size(16.dp)
-                .background(knobColor, CircleShape),
-        )
     }
 }
 
