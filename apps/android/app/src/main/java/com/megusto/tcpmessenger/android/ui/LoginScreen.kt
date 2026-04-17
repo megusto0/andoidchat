@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -18,6 +19,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -46,6 +49,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -60,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
@@ -69,10 +74,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -81,18 +92,23 @@ import androidx.compose.ui.unit.sp
 import com.megusto.tcpmessenger.android.data.ConnectionStatus
 import com.megusto.tcpmessenger.android.data.DiscoveredServer
 import com.megusto.tcpmessenger.android.ui.theme.Accent
+import com.megusto.tcpmessenger.android.ui.theme.AccentBorder
+import com.megusto.tcpmessenger.android.ui.theme.AccentDim
+import com.megusto.tcpmessenger.android.ui.theme.AccentMuted
 import com.megusto.tcpmessenger.android.ui.theme.AccentOnBubble
+import com.megusto.tcpmessenger.android.ui.theme.AppBackground
+import com.megusto.tcpmessenger.android.ui.theme.BorderSoft
+import com.megusto.tcpmessenger.android.ui.theme.ElevatedCard
 import com.megusto.tcpmessenger.android.ui.theme.ErrorRed
-import com.megusto.tcpmessenger.android.ui.theme.LoginAccentDim
-import com.megusto.tcpmessenger.android.ui.theme.LoginAccentLine
 import com.megusto.tcpmessenger.android.ui.theme.LoginBackgroundBottom
-import com.megusto.tcpmessenger.android.ui.theme.LoginBackgroundTop
-import com.megusto.tcpmessenger.android.ui.theme.LoginTextMuted
-import com.megusto.tcpmessenger.android.ui.theme.LoginTextPrimary
-import com.megusto.tcpmessenger.android.ui.theme.LoginUnderlineIdle
-import com.megusto.tcpmessenger.android.ui.theme.LoginWarning
+import com.megusto.tcpmessenger.android.ui.theme.MainSurface
 import com.megusto.tcpmessenger.android.ui.theme.MessengerType
 import com.megusto.tcpmessenger.android.ui.theme.TcpMessengerTheme
+import com.megusto.tcpmessenger.android.ui.theme.TextFaint
+import com.megusto.tcpmessenger.android.ui.theme.TextMuted
+import com.megusto.tcpmessenger.android.ui.theme.TextPrimary
+import com.megusto.tcpmessenger.android.ui.theme.TextSecondary
+import com.megusto.tcpmessenger.android.ui.theme.Warn
 import kotlinx.coroutines.launch
 
 private sealed interface DiscoveryUiState {
@@ -142,28 +158,24 @@ private fun LoginScreenContent(
     onConnect: (host: String, port: String, name: String) -> Unit,
     overrideCollapseProgress: Float? = null,
 ) {
-    var manualRevealed by rememberSaveable { mutableStateOf(false) }
-    var manualIp by rememberSaveable { mutableStateOf("") }
-    var manualPort by rememberSaveable { mutableStateOf("5000") }
+    var autoDiscovery by rememberSaveable { mutableStateOf(true) }
+    var ip by rememberSaveable { mutableStateOf("") }
+    var port by rememberSaveable { mutableStateOf("5000") }
     var name by rememberSaveable { mutableStateOf("") }
     var prefilledFromDiscovery by rememberSaveable { mutableStateOf(false) }
 
-    // Seed the manual fields once with the first successful discovery so flipping
-    // to "Другой" shows the already-found values instead of an empty form.
-    LaunchedEffect(discoveryState) {
-        if (prefilledFromDiscovery) return@LaunchedEffect
+    // Seed the input fields once on the first successful discovery. Users who
+    // then edit manually won't have their values clobbered by later retries.
+    LaunchedEffect(discoveryState, autoDiscovery) {
+        if (!autoDiscovery || prefilledFromDiscovery) return@LaunchedEffect
         val found = discoveryState as? DiscoveryUiState.Found ?: return@LaunchedEffect
-        manualIp = found.ip
-        manualPort = found.port.toString()
+        ip = found.ip
+        port = found.port.toString()
         prefilledFromDiscovery = true
     }
 
-    val found = discoveryState as? DiscoveryUiState.Found
-    val useDiscovered = found != null && !manualRevealed
-    val effectiveHost = if (useDiscovered) found!!.ip else manualIp.trim()
-    val effectivePort = if (useDiscovered) found!!.port.toString() else manualPort.trim()
-    val manualFieldsVisible = manualRevealed || discoveryState is DiscoveryUiState.NotFound
-
+    val effectiveHost = ip.trim()
+    val effectivePort = port.trim()
     val canConnect = !connecting &&
         name.trim().isNotEmpty() &&
         effectiveHost.isNotEmpty() &&
@@ -188,7 +200,7 @@ private fun LoginScreenContent(
         Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(LoginBackgroundTop, LoginBackgroundBottom)),
+                Brush.verticalGradient(listOf(AppBackground, LoginBackgroundBottom)),
             ),
     ) {
         AccentGlow(Modifier.fillMaxSize())
@@ -199,64 +211,91 @@ private fun LoginScreenContent(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 28.dp),
         ) {
-            Spacer(Modifier.height(lerp(48.dp, 20.dp, collapseProgress)))
+            Spacer(Modifier.height(lerp(40.dp, 16.dp, collapseProgress)))
 
             CollapsingHero(
                 progress = collapseProgress,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(Modifier.height(lerp(40.dp, 24.dp, collapseProgress)))
-
-            DiscoveryPill(
-                state = discoveryState,
-                showingManual = manualRevealed,
-                onManualToggle = { manualRevealed = !manualRevealed },
-                onRetry = onRetry,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Spacer(Modifier.height(lerp(28.dp, 16.dp, collapseProgress)))
 
             AnimatedVisibility(
-                visible = manualFieldsVisible,
+                visible = autoDiscovery,
                 enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-                exit = shrinkVertically(tween(220)) + fadeOut(tween(220)),
+                exit = shrinkVertically(tween(200)) + fadeOut(tween(180)),
             ) {
-                ManualConnectionFields(
-                    ip = manualIp,
-                    port = manualPort,
-                    onIpChange = { manualIp = it },
-                    onPortChange = { raw -> manualPort = raw.filter(Char::isDigit).take(5) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                )
+                Column {
+                    DiscoveryCard(
+                        state = discoveryState,
+                        onRetry = onRetry,
+                        onDismiss = { autoDiscovery = false },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(20.dp))
+                }
             }
 
-            Spacer(Modifier.height(lerp(28.dp, 20.dp, collapseProgress)))
+            BoxedTextField(
+                label = "IP-адрес",
+                value = ip,
+                onValueChange = { ip = it },
+                monospace = true,
+                keyboardType = KeyboardType.Uri,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
 
-            NameField(
-                name = name,
-                onNameChange = { name = it },
+            BoxedTextField(
+                label = "Порт",
+                value = port,
+                onValueChange = { raw -> port = raw.filter(Char::isDigit).take(5) },
+                monospace = true,
+                keyboardType = KeyboardType.Number,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
+
+            val nameFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) {
+                if (name.isEmpty()) runCatching { nameFocusRequester.requestFocus() }
+            }
+            BoxedTextField(
+                label = "Имя",
+                value = name,
+                onValueChange = { name = it },
+                placeholder = "Введите имя",
+                imeAction = ImeAction.Done,
+                focusRequester = nameFocusRequester,
                 modifier = Modifier.fillMaxWidth(),
             )
 
             // Keeps the button anchored above the keyboard (or nav bar) while
-            // the form absorbs slack from the collapsed hero instead of pushing
-            // the button upward.
+            // the form absorbs slack from the collapsed hero.
             Spacer(Modifier.weight(1f))
 
+            AutoDiscoveryToggle(
+                checked = autoDiscovery,
+                onCheckedChange = { nextOn ->
+                    autoDiscovery = nextOn
+                    if (nextOn) onRetry()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             if (!error.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = error,
                     style = MessengerType.BodyMuted,
                     color = ErrorRed,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
+
+            Spacer(Modifier.height(4.dp))
 
             ConnectButton(
                 enabled = canConnect,
@@ -265,7 +304,22 @@ private fun LoginScreenContent(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(14.dp))
+
+            Text(
+                text = "TCP · v1.4.0",
+                style = TextStyle(
+                    fontSize = 11.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Normal,
+                    letterSpacing = 0.5.sp,
+                ),
+                color = TextFaint,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -287,12 +341,11 @@ private fun AccentGlow(modifier: Modifier = Modifier) {
 
 @Composable
 private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
-    val logoSize = lerp(76.dp, 40.dp, progress)
-    val iconSize = lerp(34.dp, 20.dp, progress)
-    val logoTitleSpacing = lerp(24.dp, 12.dp, progress)
-    val titleFontSize = lerp(32.sp, 20.sp, progress)
-    // Tagline has its own crossfade/collapse driven off the same progress so
-    // it doesn't leave a ghost gap when it fades out.
+    val logoSize = lerp(72.dp, 40.dp, progress)
+    val logoCorner = lerp(22.dp, 12.dp, progress)
+    val iconSize = lerp(32.dp, 20.dp, progress)
+    val logoTitleSpacing = lerp(18.dp, 10.dp, progress)
+    val titleFontSize = lerp(26.sp, 18.sp, progress)
     val taglineVisible = progress < 0.35f
 
     Column(
@@ -302,21 +355,30 @@ private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .size(logoSize)
-                .background(LoginAccentDim, CircleShape),
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Accent, AccentDim),
+                    ),
+                    shape = RoundedCornerShape(logoCorner),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Rounded.ChatBubbleOutline,
                 contentDescription = null,
-                tint = Accent,
+                tint = AccentOnBubble,
                 modifier = Modifier.size(iconSize),
             )
         }
         Spacer(Modifier.height(logoTitleSpacing))
         Text(
             text = "TCP Messenger",
-            style = MessengerType.Display.copy(fontSize = titleFontSize),
-            color = LoginTextPrimary,
+            style = TextStyle(
+                fontSize = titleFontSize,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = (-0.5).sp,
+            ),
+            color = TextPrimary,
         )
         AnimatedVisibility(
             visible = taglineVisible,
@@ -328,11 +390,14 @@ private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
             ) + fadeOut(animationSpec = tween(120)),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Локальный чат по TCP",
-                    style = MessengerType.BodyMuted,
-                    color = LoginTextMuted,
+                    style = TextStyle(
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                    color = TextMuted,
                 )
             }
         }
@@ -340,74 +405,172 @@ private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DiscoveryPill(
+private fun DiscoveryCard(
     state: DiscoveryUiState,
-    showingManual: Boolean,
-    onManualToggle: () -> Unit,
     onRetry: () -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(percent = 50)
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = modifier
-            .height(56.dp)
-            .background(LoginAccentDim, shape)
-            .border(1.dp, LoginAccentLine, shape)
-            .padding(horizontal = 20.dp),
+            .clip(shape)
+            .background(MainSurface)
+            .border(1.dp, BorderSoft, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DiscoveryIconBadge(state = state)
+        Spacer(Modifier.width(12.dp))
+
+        when (state) {
+            DiscoveryUiState.Searching -> {
+                Column(modifier = Modifier.weight(1f)) {
+                    CardLabel("Поиск сервера")
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "scanning 192.168…",
+                        style = MessengerType.Mono.copy(fontSize = 13.sp),
+                        color = TextMuted,
+                    )
+                }
+            }
+
+            is DiscoveryUiState.Found -> {
+                Column(modifier = Modifier.weight(1f)) {
+                    CardLabel("Сервер найден")
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${state.ip}:${state.port}",
+                        style = MessengerType.Mono.copy(fontSize = 14.sp),
+                        color = TextPrimary,
+                    )
+                }
+                GhostAction(text = "Скрыть", onClick = onDismiss)
+            }
+
+            DiscoveryUiState.NotFound -> {
+                Column(modifier = Modifier.weight(1f)) {
+                    CardLabel("Сервер не найден")
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Повторите поиск или введите адрес",
+                        style = MessengerType.BodyMuted.copy(fontSize = 12.5.sp),
+                        color = TextMuted,
+                    )
+                }
+                GhostAction(text = "Повторить", onClick = onRetry)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardLabel(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.3.sp,
+        ),
+        color = TextMuted,
+    )
+}
+
+@Composable
+private fun DiscoveryIconBadge(state: DiscoveryUiState) {
+    val shape = RoundedCornerShape(10.dp)
+    val bg: Color
+    val border: Color
+    val tint: Color
+    when (state) {
+        DiscoveryUiState.NotFound -> {
+            bg = ElevatedCard
+            border = BorderSoft
+            tint = Warn
+        }
+        else -> {
+            bg = AccentMuted
+            border = AccentBorder
+            tint = Accent
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, border, shape),
+        contentAlignment = Alignment.Center,
     ) {
         when (state) {
             DiscoveryUiState.Searching -> {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = Accent,
-                )
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    text = "Ищу сервер в сети…",
-                    style = MessengerType.BodyMuted,
-                    color = LoginTextMuted,
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 1.6.dp,
+                    color = tint,
                 )
             }
-
             is DiscoveryUiState.Found -> {
-                PulsingDot(color = Accent, size = 8.dp)
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Сервер найден",
-                        style = MessengerType.Label,
-                        color = LoginTextMuted,
-                    )
-                    Text(
-                        text = "${state.ip}:${state.port}",
-                        style = MessengerType.Mono,
-                        color = LoginTextPrimary,
-                    )
-                }
-                GhostAction(
-                    text = if (showingManual) "Отмена" else "Другой",
-                    onClick = onManualToggle,
+                RadarGlyph(
+                    color = tint,
+                    modifier = Modifier.size(20.dp),
                 )
-            }
-
-            DiscoveryUiState.NotFound -> {
+                // corner pulse dot — same position as the mockup
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(LoginWarning, CircleShape),
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                ) {
+                    PulsingDot(color = Accent, size = 6.dp)
+                }
+            }
+            DiscoveryUiState.NotFound -> {
+                Icon(
+                    imageVector = Icons.Rounded.WarningAmber,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp),
                 )
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    text = "Сервер не найден",
-                    style = MessengerType.BodyMuted,
-                    color = LoginTextPrimary,
-                    modifier = Modifier.weight(1f),
-                )
-                GhostAction(text = "Повторить", onClick = onRetry)
             }
         }
+    }
+}
+
+@Composable
+private fun RadarGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val stroke = 1.6.dp.toPx()
+        val side = size.minDimension
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val rOuter = side * 0.42f
+        val rInner = side * 0.16f
+
+        drawCircle(
+            color = color.copy(alpha = 0.5f),
+            radius = rOuter,
+            center = center,
+            style = Stroke(width = stroke),
+        )
+        drawCircle(
+            color = color,
+            radius = rInner,
+            center = center,
+            style = Stroke(width = stroke),
+        )
+        // 45° sweep line
+        val sweepEnd = Offset(
+            x = center.x + rOuter * 0.71f,
+            y = center.y - rOuter * 0.71f,
+        )
+        drawLine(
+            color = color.copy(alpha = 0.8f),
+            start = center,
+            end = sweepEnd,
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
     }
 }
 
@@ -416,7 +579,7 @@ private fun PulsingDot(color: Color, size: Dp) {
     val transition = rememberInfiniteTransition(label = "pulse")
     val scale by transition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.2f,
+        targetValue = 1.3f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 800, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
@@ -424,7 +587,7 @@ private fun PulsingDot(color: Color, size: Dp) {
         label = "pulse-scale",
     )
     val alpha by transition.animateFloat(
-        initialValue = 0.6f,
+        initialValue = 0.55f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 800, easing = LinearEasing),
@@ -448,85 +611,53 @@ private fun GhostAction(
 ) {
     Text(
         text = text,
-        style = MessengerType.BodyMuted,
+        style = TextStyle(
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        ),
         color = Accent,
         modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     )
 }
 
 @Composable
-private fun ManualConnectionFields(
-    ip: String,
-    port: String,
-    onIpChange: (String) -> Unit,
-    onPortChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        UnderlineTextField(
-            value = ip,
-            onValueChange = onIpChange,
-            label = "IP-адрес",
-            monospace = true,
-            keyboardType = KeyboardType.Uri,
-        )
-        UnderlineTextField(
-            value = port,
-            onValueChange = onPortChange,
-            label = "Порт",
-            keyboardType = KeyboardType.Number,
-            monospace = true,
-        )
-    }
-}
-
-@Composable
-private fun NameField(
-    name: String,
-    onNameChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        if (name.isEmpty()) {
-            runCatching { focusRequester.requestFocus() }
-        }
-    }
-    UnderlineTextField(
-        value = name,
-        onValueChange = onNameChange,
-        label = "Имя",
-        modifier = modifier,
-        imeAction = ImeAction.Done,
-        focusRequester = focusRequester,
-    )
-}
-
-@Composable
-private fun UnderlineTextField(
+private fun BoxedTextField(
+    label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    label: String,
     modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    monospace: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
-    monospace: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val underlineColor by animateColorAsState(
-        targetValue = if (focused) Accent else LoginUnderlineIdle,
+    val shape = RoundedCornerShape(10.dp)
+
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) AccentBorder else BorderSoft,
         animationSpec = tween(durationMillis = 150),
-        label = "underline-color",
+        label = "field-border",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (focused) Accent else TextMuted,
+        animationSpec = tween(durationMillis = 150),
+        label = "field-label",
     )
 
-    val baseStyle = if (monospace) MessengerType.Mono else MessengerType.Input
-    val textFieldStyle = baseStyle.copy(color = LoginTextPrimary)
+    val baseStyle = if (monospace) {
+        TextStyle(
+            fontFamily = FontFamily.Monospace,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    } else {
+        TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Normal)
+    }
 
     val inputModifier = Modifier
         .fillMaxWidth()
@@ -536,28 +667,99 @@ private fun UnderlineTextField(
     Column(modifier = modifier) {
         Text(
             text = label,
-            style = MessengerType.Label,
-            color = if (focused) Accent else LoginTextMuted,
-        )
-        Spacer(Modifier.height(8.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = textFieldStyle,
-            cursorBrush = SolidColor(Accent),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = keyboardType,
-                imeAction = imeAction,
+            style = TextStyle(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.3.sp,
             ),
-            modifier = inputModifier.padding(vertical = 6.dp),
+            color = labelColor,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(underlineColor),
+                .clip(shape)
+                .background(MainSurface)
+                .border(1.dp, borderColor, shape)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (value.isEmpty() && !placeholder.isNullOrEmpty() && !focused) {
+                Text(
+                    text = placeholder,
+                    style = baseStyle,
+                    color = TextMuted,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = baseStyle.copy(color = TextPrimary),
+                cursorBrush = SolidColor(Accent),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = keyboardType,
+                    imeAction = imeAction,
+                ),
+                modifier = inputModifier,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AutoDiscoveryToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Автопоиск в сети",
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
+            color = TextSecondary,
+            modifier = Modifier.weight(1f),
+        )
+        PillSwitch(checked = checked)
+    }
+}
+
+@Composable
+private fun PillSwitch(checked: Boolean) {
+    val trackShape = RoundedCornerShape(percent = 50)
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) Accent else ElevatedCard,
+        animationSpec = tween(durationMillis = 180),
+        label = "switch-track",
+    )
+    val knobOffset by animateDpAsState(
+        targetValue = if (checked) 18.dp else 0.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "switch-knob",
+    )
+    val knobColor = if (checked) Color.White else TextMuted
+
+    Box(
+        modifier = Modifier
+            .width(40.dp)
+            .height(22.dp)
+            .clip(trackShape)
+            .background(trackColor)
+            .border(1.dp, if (checked) AccentBorder else BorderSoft, trackShape)
+            .padding(2.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = knobOffset)
+                .size(16.dp)
+                .background(knobColor, CircleShape),
         )
     }
 }
@@ -588,10 +790,11 @@ private fun ConnectButton(
 
     Box(
         modifier = modifier
-            .height(56.dp)
+            .height(52.dp)
             .scale(scale)
             .alpha(alpha)
-            .background(Accent, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(Accent)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -609,7 +812,11 @@ private fun ConnectButton(
         } else {
             Text(
                 text = "Подключиться",
-                style = MessengerType.Button,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.2.sp,
+                ),
                 color = AccentOnBubble,
             )
         }
@@ -619,7 +826,7 @@ private fun ConnectButton(
 @Preview(
     name = "Login · discovery found",
     showBackground = true,
-    backgroundColor = 0xFF0E0E11,
+    backgroundColor = 0xFF0B0B0C,
     widthDp = 411,
     heightDp = 914,
 )
@@ -627,7 +834,7 @@ private fun ConnectButton(
 private fun LoginScreenPreviewFound() {
     TcpMessengerTheme {
         LoginScreenContent(
-            discoveryState = DiscoveryUiState.Found("192.168.1.42", 5000),
+            discoveryState = DiscoveryUiState.Found("192.168.3.19", 5000),
             connecting = false,
             error = null,
             onRetry = {},
@@ -639,7 +846,7 @@ private fun LoginScreenPreviewFound() {
 @Preview(
     name = "Login · searching",
     showBackground = true,
-    backgroundColor = 0xFF0E0E11,
+    backgroundColor = 0xFF0B0B0C,
     widthDp = 411,
     heightDp = 914,
 )
@@ -657,9 +864,9 @@ private fun LoginScreenPreviewSearching() {
 }
 
 @Preview(
-    name = "Login · manual",
+    name = "Login · not found",
     showBackground = true,
-    backgroundColor = 0xFF0E0E11,
+    backgroundColor = 0xFF0B0B0C,
     widthDp = 411,
     heightDp = 914,
 )
@@ -679,7 +886,7 @@ private fun LoginScreenPreviewManual() {
 @Preview(
     name = "Login · keyboard open (collapsed)",
     showBackground = true,
-    backgroundColor = 0xFF0E0E11,
+    backgroundColor = 0xFF0B0B0C,
     widthDp = 411,
     heightDp = 914,
 )
@@ -687,7 +894,7 @@ private fun LoginScreenPreviewManual() {
 private fun LoginScreenCollapsedPreview() {
     TcpMessengerTheme {
         LoginScreenContent(
-            discoveryState = DiscoveryUiState.Found("192.168.1.42", 5000),
+            discoveryState = DiscoveryUiState.Found("192.168.3.19", 5000),
             connecting = false,
             error = null,
             onRetry = {},
