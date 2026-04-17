@@ -1,6 +1,9 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.megusto.tcpmessenger.android.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -9,6 +12,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -22,23 +26,24 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,12 +69,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.unit.sp
 import com.megusto.tcpmessenger.android.data.ConnectionStatus
 import com.megusto.tcpmessenger.android.data.DiscoveredServer
 import com.megusto.tcpmessenger.android.ui.theme.Accent
@@ -132,6 +140,7 @@ private fun LoginScreenContent(
     error: String?,
     onRetry: () -> Unit,
     onConnect: (host: String, port: String, name: String) -> Unit,
+    overrideCollapseProgress: Float? = null,
 ) {
     var manualRevealed by rememberSaveable { mutableStateOf(false) }
     var manualIp by rememberSaveable { mutableStateOf("") }
@@ -160,6 +169,21 @@ private fun LoginScreenContent(
         effectiveHost.isNotEmpty() &&
         (effectivePort.toIntOrNull()?.let { it in 1..65_535 } == true)
 
+    // Single source of truth that drives every hero interpolation. The hero
+    // collapses when the IME is up, the screen is too short for a big header,
+    // or we're in landscape. Previews can override via [overrideCollapseProgress].
+    val imeVisible = WindowInsets.isImeVisible
+    val configuration = LocalConfiguration.current
+    val forceCollapse = imeVisible ||
+        configuration.screenHeightDp < 600 ||
+        configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val animatedCollapse by animateFloatAsState(
+        targetValue = if (forceCollapse) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+        label = "heroCollapse",
+    )
+    val collapseProgress = overrideCollapseProgress ?: animatedCollapse
+
     Box(
         Modifier
             .fillMaxSize()
@@ -177,50 +201,51 @@ private fun LoginScreenContent(
                 .imePadding()
                 .padding(horizontal = 24.dp),
         ) {
-            Spacer(Modifier.height(48.dp))
-            HeroSection(Modifier.fillMaxWidth())
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(lerp(48.dp, 20.dp, collapseProgress)))
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+            CollapsingHero(
+                progress = collapseProgress,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(lerp(40.dp, 24.dp, collapseProgress)))
+
+            DiscoveryPill(
+                state = discoveryState,
+                showingManual = manualRevealed,
+                onManualToggle = { manualRevealed = !manualRevealed },
+                onRetry = onRetry,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            AnimatedVisibility(
+                visible = manualFieldsVisible,
+                enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+                exit = shrinkVertically(tween(220)) + fadeOut(tween(220)),
             ) {
-                DiscoveryPill(
-                    state = discoveryState,
-                    showingManual = manualRevealed,
-                    onManualToggle = { manualRevealed = !manualRevealed },
-                    onRetry = onRetry,
-                    modifier = Modifier.fillMaxWidth(),
+                ManualConnectionFields(
+                    ip = manualIp,
+                    port = manualPort,
+                    onIpChange = { manualIp = it },
+                    onPortChange = { raw -> manualPort = raw.filter(Char::isDigit).take(5) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
                 )
-
-                AnimatedVisibility(
-                    visible = manualFieldsVisible,
-                    enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-                    exit = shrinkVertically(tween(220)) + fadeOut(tween(220)),
-                ) {
-                    ManualConnectionFields(
-                        ip = manualIp,
-                        port = manualPort,
-                        onIpChange = { manualIp = it },
-                        onPortChange = { raw -> manualPort = raw.filter(Char::isDigit).take(5) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 24.dp),
-                    )
-                }
-
-                Spacer(Modifier.height(28.dp))
-
-                NameField(
-                    name = name,
-                    onNameChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(20.dp))
             }
+
+            Spacer(Modifier.height(lerp(28.dp, 20.dp, collapseProgress)))
+
+            NameField(
+                name = name,
+                onNameChange = { name = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Keeps the button anchored above the keyboard (or nav bar) while
+            // the form absorbs slack from the collapsed hero instead of pushing
+            // the button upward.
+            Spacer(Modifier.weight(1f))
 
             if (!error.isNullOrBlank()) {
                 Text(
@@ -237,10 +262,10 @@ private fun LoginScreenContent(
                 enabled = canConnect,
                 loading = connecting,
                 onClick = { onConnect(effectiveHost, effectivePort, name.trim()) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 32.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
+
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
@@ -261,14 +286,22 @@ private fun AccentGlow(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun HeroSection(modifier: Modifier = Modifier) {
+private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
+    val logoSize = lerp(76.dp, 40.dp, progress)
+    val iconSize = lerp(34.dp, 20.dp, progress)
+    val logoTitleSpacing = lerp(24.dp, 12.dp, progress)
+    val titleFontSize = lerp(32.sp, 20.sp, progress)
+    // Tagline has its own crossfade/collapse driven off the same progress so
+    // it doesn't leave a ghost gap when it fades out.
+    val taglineVisible = progress < 0.35f
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
-                .size(76.dp)
+                .size(logoSize)
                 .background(LoginAccentDim, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -276,21 +309,33 @@ private fun HeroSection(modifier: Modifier = Modifier) {
                 imageVector = Icons.Rounded.ChatBubbleOutline,
                 contentDescription = null,
                 tint = Accent,
-                modifier = Modifier.size(34.dp),
+                modifier = Modifier.size(iconSize),
             )
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(logoTitleSpacing))
         Text(
             text = "TCP Messenger",
-            style = MessengerType.Display,
+            style = MessengerType.Display.copy(fontSize = titleFontSize),
             color = LoginTextPrimary,
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Локальный чат по TCP",
-            style = MessengerType.BodyMuted,
-            color = LoginTextMuted,
-        )
+        AnimatedVisibility(
+            visible = taglineVisible,
+            enter = expandVertically(
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+            ) + fadeIn(animationSpec = tween(180)),
+            exit = shrinkVertically(
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+            ) + fadeOut(animationSpec = tween(120)),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Локальный чат по TCP",
+                    style = MessengerType.BodyMuted,
+                    color = LoginTextMuted,
+                )
+            }
+        }
     }
 }
 
@@ -627,6 +672,27 @@ private fun LoginScreenPreviewManual() {
             error = null,
             onRetry = {},
             onConnect = { _, _, _ -> },
+        )
+    }
+}
+
+@Preview(
+    name = "Login · keyboard open (collapsed)",
+    showBackground = true,
+    backgroundColor = 0xFF0E0E11,
+    widthDp = 411,
+    heightDp = 914,
+)
+@Composable
+private fun LoginScreenCollapsedPreview() {
+    TcpMessengerTheme {
+        LoginScreenContent(
+            discoveryState = DiscoveryUiState.Found("192.168.1.42", 5000),
+            connecting = false,
+            error = null,
+            onRetry = {},
+            onConnect = { _, _, _ -> },
+            overrideCollapseProgress = 1f,
         )
     }
 }
