@@ -22,3 +22,14 @@ val Success = Color(0xFF3CCB7F)
 val ErrorRed = Color(0xFFF97066)
 val InfoBlue = Color(0xFF7AA7E8)
 val ServerBubble = Color(0xFF2D3748)
+
+// Login screen palette — warm near-black gradient, single accent, no card chrome
+val LoginBackgroundTop = Color(0xFF16161B)
+val LoginBackgroundBottom = Color(0xFF0E0E11)
+val LoginTextPrimary = Color(0xFFF5F5F7)
+val LoginTextMuted = Color(0x99F5F5F7) // 60% alpha
+val LoginTextFaint = Color(0x59F5F5F7) // 35% alpha
+val LoginAccentDim = Color(0x1AD97757) // accent @ 10% for fills
+val LoginAccentLine = Color(0x40D97757) // accent @ 25% for 1dp borders
+val LoginUnderlineIdle = Color(0x26F5F5F7) // white @ ~15% for unfocused underline
+val LoginWarning = Color(0xFFE8B87A)
