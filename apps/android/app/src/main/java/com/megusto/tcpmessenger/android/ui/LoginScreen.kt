@@ -4,21 +4,14 @@ package com.megusto.tcpmessenger.android.ui
 
 import android.content.Context
 import android.content.res.Configuration
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,14 +31,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
@@ -53,6 +44,8 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -199,12 +192,7 @@ private fun LoginScreenContent(
     val forceCollapse = imeVisible ||
         configuration.screenHeightDp < 600 ||
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val animatedCollapse by animateFloatAsState(
-        targetValue = if (forceCollapse) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
-        label = "heroCollapse",
-    )
-    val collapseProgress = overrideCollapseProgress ?: animatedCollapse
+    val collapseProgress = overrideCollapseProgress ?: if (forceCollapse) 1f else 0f
 
     Box(
         Modifier
@@ -232,30 +220,20 @@ private fun LoginScreenContent(
 
             Spacer(Modifier.height(lerp(28.dp, 16.dp, collapseProgress)))
 
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn(tween(160)),
-                exit = fadeOut(tween(120)),
-            ) {
-                Column {
-                    DiscoveryCard(
-                        state = discoveryState,
-                        showManualConnectionFields = showManualConnectionFields,
-                        onRetry = onRetry,
-                        onToggleManualFields = {
-                            showManualConnectionFields = !showManualConnectionFields
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(20.dp))
-                }
+            Column {
+                DiscoveryCard(
+                    state = discoveryState,
+                    showManualConnectionFields = showManualConnectionFields,
+                    onRetry = onRetry,
+                    onToggleManualFields = {
+                        showManualConnectionFields = !showManualConnectionFields
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(20.dp))
             }
 
-            AnimatedVisibility(
-                visible = showManualConnectionFields,
-                enter = expandVertically(tween(180)) + fadeIn(tween(160)),
-                exit = shrinkVertically(tween(140)) + fadeOut(tween(120)),
-            ) {
+            if (showManualConnectionFields) {
                 Column {
                     BoxedTextField(
                         label = "IP-адрес",
@@ -392,15 +370,7 @@ private fun CollapsingHero(progress: Float, modifier: Modifier = Modifier) {
             ),
             color = TextPrimary,
         )
-        AnimatedVisibility(
-            visible = taglineVisible,
-            enter = expandVertically(
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
-            ) + fadeIn(animationSpec = tween(180)),
-            exit = shrinkVertically(
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
-            ) + fadeOut(animationSpec = tween(120)),
-        ) {
+        if (taglineVisible) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -658,38 +628,51 @@ private fun BoxedTextField(
             color = labelColor,
         )
         Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = baseStyle.copy(
+                color = TextPrimary,
+                platformStyle = PlatformTextStyle(includeFontPadding = true),
+            ),
+            placeholder = if (!placeholder.isNullOrEmpty()) {
+                {
+                    Text(
+                        text = placeholder,
+                        style = baseStyle,
+                        color = TextMuted,
+                    )
+                }
+            } else {
+                null
+            },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = imeAction,
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                disabledTextColor = TextPrimary.copy(alpha = 0.6f),
+                cursorColor = Accent,
+                focusedContainerColor = MainSurface,
+                unfocusedContainerColor = MainSurface,
+                disabledContainerColor = MainSurface,
+                errorContainerColor = MainSurface,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                errorIndicatorColor = Color.Transparent,
+                focusedPlaceholderColor = TextMuted,
+                unfocusedPlaceholderColor = TextMuted,
+                disabledPlaceholderColor = TextMuted,
+            ),
+            shape = shape,
+            modifier = inputModifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(MainSurface)
-                .border(1.dp, borderColor, shape)
-                .padding(horizontal = 14.dp, vertical = 11.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            if (value.isEmpty() && !placeholder.isNullOrEmpty() && !focused) {
-                Text(
-                    text = placeholder,
-                    style = baseStyle,
-                    color = TextMuted,
-                )
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                textStyle = baseStyle.copy(
-                    color = TextPrimary,
-                    platformStyle = PlatformTextStyle(includeFontPadding = true),
-                ),
-                cursorBrush = SolidColor(Accent),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = keyboardType,
-                    imeAction = imeAction,
-                ),
-                modifier = inputModifier.padding(vertical = 1.dp),
-            )
-        }
+                .border(1.dp, borderColor, shape),
+        )
     }
 }
 
