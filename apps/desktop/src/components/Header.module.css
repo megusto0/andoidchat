@@ -1,26 +1,24 @@
-/* Header — шапка */
-
 .header {
   display: flex;
   align-items: center;
-  height: 56px;
-  padding: 0 16px;
+  height: 38px;
+  padding: 0;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
-  gap: 12px;
   flex-shrink: 0;
   z-index: 20;
+  -webkit-app-region: drag;
 }
 
 .menuBtn {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
+  width: 38px;
+  height: 38px;
   color: var(--text-secondary);
   transition: background var(--duration-fast), color var(--duration-fast);
+  -webkit-app-region: no-drag;
 }
 
 .menuBtn:hover {
@@ -31,70 +29,45 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding-left: 12px;
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .brandIcon {
-  width: 30px;
-  height: 30px;
-  background: linear-gradient(135deg, var(--accent) 0%, #e08b6c 100%);
-  border-radius: var(--radius-xs);
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-}
-
-.brandText {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
-}
-
-.center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-}
-
-.statusIndicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 14px;
-  border-radius: var(--radius-full);
-  background: var(--bg-input);
-}
-
-.statusDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  color: var(--text-on-accent);
   flex-shrink: 0;
 }
 
-.online {
-  background: var(--success);
-  box-shadow: 0 0 6px rgba(61, 170, 92, 0.4);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.offline {
-  background: var(--error);
-  box-shadow: 0 0 6px rgba(217, 64, 64, 0.3);
-}
-
-.userName {
-  font-size: 13px;
+.brandText {
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.brandMeta {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 220px;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
 }
 
 .actions {
@@ -102,56 +75,64 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .actionBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 5px;
+  padding: 7px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  border: 1px solid var(--border);
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   background: transparent;
   transition:
     background var(--duration-fast),
-    color var(--duration-fast);
+    color var(--duration-fast),
+    border-color var(--duration-fast);
 }
 
 .actionBtn:hover {
-  background: var(--bg-surface-hover);
+  background: var(--bg-elevated);
   color: var(--text-primary);
+  border-color: var(--text-secondary);
 }
 
 .actionBtnActive {
-  background: var(--accent-light);
-  color: var(--accent);
   border-color: var(--accent);
+  color: var(--accent);
 }
 
 .actionBtnActive:hover {
-  background: var(--accent-light);
-  color: var(--accent-hover);
   border-color: var(--accent-hover);
+  color: var(--accent-hover);
+  background: var(--bg-surface-hover);
 }
 
 .disconnectBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 5px;
+  padding: 7px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  border: 1px solid var(--border);
+  font-size: 12px;
   font-weight: 500;
-  color: var(--error);
+  color: var(--text-secondary);
   background: transparent;
   transition:
-    background var(--duration-fast);
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
 }
 
 .disconnectBtn:hover {
   background: var(--error-bg);
+  color: var(--error);
+  border-color: rgba(217,107,107,0.4);
 }
 
 @media (max-width: 700px) {
@@ -166,6 +147,10 @@
 
   .actionBtn,
   .disconnectBtn {
-    padding: 7px 10px;
+    padding: 7px 8px;
+  }
+
+  .brandMeta {
+    display: none;
   }
 }

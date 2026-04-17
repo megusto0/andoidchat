@@ -24,6 +24,8 @@ export interface SimMetrics {
   serverResponsesConfirmed: number;
   incorrectResponses: number;
   avgResponseMs: number;
+  p50ResponseMs: number;
+  p95ResponseMs: number;
   messagesPerSecond: number;
   elapsedSeconds: number;
   phase: string;
@@ -40,6 +42,8 @@ const INITIAL_METRICS: SimMetrics = {
   serverResponsesConfirmed: 0,
   incorrectResponses: 0,
   avgResponseMs: 0,
+  p50ResponseMs: 0,
+  p95ResponseMs: 0,
   messagesPerSecond: 0,
   elapsedSeconds: 0,
   phase: "idle",

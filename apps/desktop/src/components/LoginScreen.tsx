@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { ConnectionStatus } from "../types";
+import { AnimatedLogo, DiscoveryRadar } from "./MotionArt";
 import s from "./LoginScreen.module.css";
 
 interface DiscoveryResult {
@@ -96,13 +97,10 @@ export function LoginScreen({
     <div className={s.backdrop}>
       <form className={s.card} onSubmit={handleSubmit}>
         <div className={s.logoWrap}>
-          <div className={s.logoIcon}>
-            <svg className={s.logoSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
+          <AnimatedLogo />
         </div>
         <h1 className={s.title}>TCP Messenger</h1>
+        <div className={s.logoMeta}>SYN · ACK · ESTABLISHED</div>
         <p className={s.subtitle}>
           Подключитесь к TCP-серверу для обмена сообщениями
         </p>
@@ -112,8 +110,8 @@ export function LoginScreen({
               discoveryState === "found" ? s.discoveryFound : ""
             } ${discoveryState === "not_found" ? s.discoveryFallback : ""}`}
           >
-            {discoveryState === "searching" && <span className={s.discoverySpinner} />}
-            <span>{discoveryText}</span>
+            <DiscoveryRadar state={discoveryState} />
+            <span className={s.discoveryText}>{discoveryText}</span>
           </div>
           <button
             className={s.discoveryButton}

@@ -55,6 +55,9 @@ export interface ChatState {
   screen: Screen;
   connectionStatus: ConnectionStatus;
   userName: string;
+  host: string;
+  port: string;
+  connectedAtMs: number | null;
   chats: Record<string, ChatContext>;
   chatOrder: string[];
   activeChatId: string | null;

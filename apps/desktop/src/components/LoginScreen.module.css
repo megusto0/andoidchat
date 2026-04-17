@@ -28,24 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14px;
-}
-
-.logoIcon {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, var(--accent) 0%, #e08b6c 100%);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 14px rgba(217, 119, 47, 0.3);
-}
-
-.logoSvg {
-  width: 26px;
-  height: 26px;
-  color: white;
+  margin-bottom: 12px;
 }
 
 .title {
@@ -55,6 +38,16 @@
   text-align: center;
   margin-bottom: 6px;
   letter-spacing: -0.02em;
+}
+
+.logoMeta {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  margin-bottom: 12px;
 }
 
 .subtitle {
@@ -77,31 +70,32 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 11px 12px;
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
+  border: 1px solid transparent;
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
 }
 
 .discoveryFound {
   background: rgba(217, 119, 87, 0.10);
   color: var(--text-primary);
+  border-color: rgba(126, 196, 137, 0.18);
 }
 
 .discoveryFallback {
+  border-color: var(--border);
 }
 
-.discoverySpinner {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  border: 2px solid rgba(255, 241, 220, 0.2);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 700ms linear infinite;
+.discoveryText {
+  min-width: 0;
 }
 
 .discoveryButton {

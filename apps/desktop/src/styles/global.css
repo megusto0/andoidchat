@@ -1,63 +1,63 @@
 /* TCP Messenger — глобальные стили, Dark Claude.ai тема */
 
 :root {
-  /* Фоны — cool zinc */
-  --bg-app: #18181b;
-  --bg-primary: #1a1a1e;
-  --bg-surface: #1f1f23;
-  --bg-surface-hover: #27272a;
-  --bg-sidebar: #222226;
-  --bg-elevated: #27272a;
-  --bg-input: #27272a;
-  --bg-message: #2c2c30;
-  --bg-own-message: #d97757;
-  --bg-other-message: #27272a;
+  --bg-app: #0b0b0c;
+  --bg-primary: #0b0b0c;
+  --bg-surface: #111114;
+  --bg-surface-hover: #1e2026;
+  --bg-sidebar: #111114;
+  --bg-elevated: #17181c;
+  --bg-input: #17181c;
+  --bg-message: #17181c;
+  --bg-own-message: var(--accent-muted);
+  --bg-other-message: #17181c;
   --bg-overlay: rgba(0, 0, 0, 0.55);
+  --bg-active: #272a31;
 
-  /* Акценты — muted terracotta */
-  --accent: #d97757;
-  --accent-hover: #e08b6c;
-  --accent-muted: rgba(217, 119, 87, 0.16);
-  --accent-light: rgba(217, 119, 87, 0.12);
-  --accent-glow: rgba(217, 119, 87, 0.25);
+  --accent: #c7a88a;
+  --accent-hover: #d7b89a;
+  --accent-dim: #a98c72;
+  --accent-muted: rgba(199,168,138,0.14);
+  --accent-border: rgba(199,168,138,0.28);
+  --accent-light: rgba(199,168,138,0.12);
+  --accent-glow: rgba(199,168,138,0.24);
 
-  /* Текст — cool neutrals */
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-tertiary: #52525b;
-  --text-on-accent: #18181b;
-  --text-on-own: #18181b;
+  --text-primary: #ecedef;
+  --text-secondary: #9a9ca3;
+  --text-muted: #6b6d74;
+  --text-tertiary: #4a4c52;
+  --text-on-accent: #1a0f0a;
+  --text-on-own: #ecedef;
 
-  /* Границы — cool */
-  --border: rgba(244, 244, 245, 0.08);
-  --border-light: rgba(244, 244, 245, 0.05);
-  --border-strong: rgba(244, 244, 245, 0.14);
+  --border: rgba(255,255,255,0.06);
+  --border-light: rgba(255,255,255,0.04);
+  --border-strong: rgba(255,255,255,0.1);
+  --divider: rgba(255,255,255,0.04);
 
-  /* Семантические */
-  --error: #f97066;
-  --error-bg: rgba(249, 112, 102, 0.12);
-  --info: #7aa7e8;
-  --info-bg: rgba(122, 167, 232, 0.10);
-  --success: #3ccb7f;
-  --success-bg: rgba(60, 203, 127, 0.10);
+  --error: #d96b6b;
+  --error-bg: rgba(217,107,107,0.12);
+  --info: #8b94b8;
+  --info-bg: rgba(139,148,184,0.12);
+  --success: #7ec489;
+  --success-bg: rgba(126,196,137,0.14);
+  --warn: #d6b36a;
 
-  /* Тени */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.25);
   --shadow-glow: 0 0 0 3px var(--accent-glow);
 
-  /* Радиусы */
   --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
+  --radius-sm: 10px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Переходы */
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --duration-fast: 120ms;
@@ -82,11 +82,10 @@ body,
 }
 
 body {
-  font-family: "Inter", "SF Pro Display", "Segoe UI Variable", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   background:
-    radial-gradient(circle at top, rgba(217, 119, 87, 0.06), transparent 30%),
-    radial-gradient(circle at 85% 20%, rgba(122, 167, 232, 0.04), transparent 18%),
-    linear-gradient(180deg, #18181b 0%, #141416 100%);
+    radial-gradient(circle at top, rgba(199,168,138,0.08), transparent 28%),
+    var(--bg-app);
   color: var(--text-primary);
   line-height: 1.5;
   font-size: 14px;
@@ -99,7 +98,7 @@ body {
 code,
 pre,
 .mono {
-  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  font-family: var(--font-mono);
 }
 
 button {
@@ -127,7 +126,7 @@ a {
 }
 
 ::selection {
-  background: rgba(217, 119, 87, 0.35);
+  background: rgba(199,168,138,0.35);
   color: var(--text-primary);
 }
 

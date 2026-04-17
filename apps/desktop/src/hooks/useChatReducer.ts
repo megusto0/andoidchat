@@ -19,6 +19,9 @@ const initialState: ChatState = {
   screen: "login",
   connectionStatus: "disconnected",
   userName: "",
+  host: "",
+  port: "",
+  connectedAtMs: null,
   chats: {},
   chatOrder: [],
   activeChatId: null,
@@ -318,6 +321,8 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         connectionStatus: "connecting",
         error: null,
         userName: action.name,
+        host: action.host,
+        port: action.port,
       };
 
     case "CONNECTED": {
@@ -332,6 +337,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         screen: "chat",
         connectionStatus: "connected",
         userName: action.name,
+        connectedAtMs: state.connectedAtMs ?? Date.now(),
         error: null,
         chats: {},
         chatOrder: [],

@@ -78,10 +78,15 @@ export function ChatLayout({
   const canSendToCurrentTarget =
     state.groupMode !== "custom" || currentTargets.length > 0;
 
+  const onlineCount = state.onlineClients.size - (state.onlineClients.has(state.userName) ? 1 : 0);
+  const isConnected = state.connectionStatus === "connected";
+
   return (
     <>
       <Header
         userName={state.userName}
+        host={state.host}
+        port={state.port}
         status={state.connectionStatus}
         showVisualization={state.showVisualization}
         onToggleVisualization={toggleVisualization}
@@ -107,6 +112,42 @@ export function ChatLayout({
           />
         )}
         <div className={s.main}>
+          <div className={s.chatHeader}>
+            <div className={s.chatHeaderInfo}>
+              <div className={s.chatHeaderTitle}>
+                <span className={s.chatHeaderName}>
+                  {activeChat?.title ?? "Чат"}
+                </span>
+                {activeChat?.kind === "group" && (
+                  <span className={s.chatHeaderBadge}>
+                    GROUP · {activeChat.participants.length}
+                  </span>
+                )}
+              </div>
+              <div className={s.chatHeaderMeta}>
+                <span
+                  className={`${s.chatHeaderDot} ${isConnected ? "" : s.chatHeaderDotOffline}`}
+                />
+                <span className={s.chatHeaderHost}>
+                  {isConnected && state.host && state.port
+                    ? `${state.host}:${state.port}`
+                    : "отключен"}
+                </span>
+                {isConnected && (
+                  <>
+                    <span className={s.chatHeaderSep}>·</span>
+                    <span className={s.chatHeaderPing}>
+                      {onlineCount} в сети
+                    </span>
+                    <span className={s.chatHeaderSep}>·</span>
+                    <span className={s.chatHeaderPing}>
+                      TCP
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           <ChatArea messages={activeChat?.messages ?? []} ownName={state.userName} />
           <InputBar
             onSend={(text) => sendMessage(text, state.groupMode, currentTargets)}

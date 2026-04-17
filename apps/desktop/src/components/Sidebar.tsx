@@ -12,6 +12,13 @@ interface Props {
   onSetGroup: (mode: GroupMode, selected: Set<string>) => void;
 }
 
+function avatarColors(letter: string) {
+  const hue = (letter.charCodeAt(0) * 47) % 360;
+  const bg = `oklch(0.32 0.04 ${hue})`;
+  const fg = `oklch(0.85 0.05 ${hue})`;
+  return { bg, fg };
+}
+
 export function Sidebar({
   userName,
   clients,
@@ -30,8 +37,6 @@ export function Sidebar({
   });
   const otherClients = orderedClients.filter((c) => c !== userName);
   const hasSelected = selectedClients.size > 0;
-  const showSearch = otherClients.length > 10;
-  const compactList = orderedClients.length >= 50;
   const searchValue = search.trim().toLowerCase();
   const visibleClients = searchValue
     ? otherClients.filter((name) =>
@@ -67,64 +72,73 @@ export function Sidebar({
     }
   }
 
+  const selfColor = avatarColors(userName.charAt(0).toUpperCase());
+
   return (
     <aside className={s.sidebar}>
-      {/* Текущий пользователь */}
       <div className={s.userCard}>
-        <div className={s.avatar}>
+        <div
+          className={s.avatar}
+          style={{ background: selfColor.bg, color: selfColor.fg }}
+        >
           {userName.charAt(0).toUpperCase()}
         </div>
         <div className={s.userInfo}>
           <div className={s.userNameText}>{userName}</div>
-          <div className={s.userStatus}>
-            <span className={s.onlineDot} />
-            В сети
+          <div className={s.userSubtitle}>
+            <span className={s.userStatusDot} />
+            Подключен · General
           </div>
         </div>
+        <button className={s.settingsBtn} aria-label="Настройки">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
 
-      {/* Клиенты */}
-      <div className={`${s.section} ${s.clientSection}`}>
+      <div className={`${s.section} ${s.clientSection} ${s.surfaceSection}`}>
         <div className={s.sectionHeader}>
           <span className={s.sectionTitle}>Клиенты</span>
-          <span className={s.clientCount}>{orderedClients.length}</span>
+          <span className={s.clientCount}>{otherClients.length}</span>
         </div>
 
-        {showSearch && (
-          <label className={s.searchWrap}>
-            <svg
-              className={s.searchIcon}
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              className={s.searchInput}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по клиентам"
-              aria-label="Поиск по клиентам"
-            />
-          </label>
-        )}
+        <label className={s.searchWrap}>
+          <svg
+            className={s.searchIcon}
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            className={s.searchInput}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск по клиентам"
+            aria-label="Поиск по клиентам"
+          />
+          <span className={s.searchHint}>⌘K</span>
+        </label>
 
-        <div className={s.clientMetaRow}>
-          <span className={s.clientMetaText}>
-            {showSearch && searchValue
-              ? `Показано ${visibleClients.length} из ${otherClients.length}`
-              : `Доступно адресатов: ${otherClients.length}`}
-          </span>
-        </div>
-
-        <div className={`${s.clientListShell} ${compactList ? s.clientListShellDense : ""}`}>
+        <div className={s.clientListShell}>
           <div className={s.clientList}>
             {otherClients.length === 0 ? (
               <div className={s.empty}>Другие клиенты появятся здесь после подключения.</div>
@@ -133,66 +147,69 @@ export function Sidebar({
             ) : visibleClients.length === 0 ? (
               <div className={s.empty}>Ничего не найдено</div>
             ) : (
-              visibleClients.map((name, i) => {
-              const isSelected = selectedClients.has(name);
-              const isOnline = onlineClients.has(name);
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  className={`${s.clientItem} ${isSelected ? s.clientItemSelected : ""} ${!isOnline ? s.clientItemOffline : ""}`}
-                  style={{ animationDelay: `${i * 40}ms` }}
-                  onClick={() => toggleClient(name)}
-                  aria-pressed={isSelected}
-                >
-                  <div className={s.clientAvatarWrap}>
-                    <div className={s.clientAvatar}>
-                      {name.charAt(0).toUpperCase()}
+              visibleClients.map((name) => {
+                const isSelected = selectedClients.has(name);
+                const isOnline = onlineClients.has(name);
+                const colors = avatarColors(name.charAt(0).toUpperCase());
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`${s.clientItem} ${isSelected ? s.clientItemSelected : ""} ${!isOnline ? s.clientItemOffline : ""}`}
+                    onClick={() => toggleClient(name)}
+                    aria-pressed={isSelected}
+                  >
+                    {isSelected && <span className={s.activeIndicator} />}
+                    <div className={s.clientAvatarWrap}>
+                      <div
+                        className={s.clientAvatar}
+                        style={{ background: colors.bg, color: colors.fg }}
+                      >
+                        {name.charAt(0).toUpperCase()}
+                      </div>
+                      {clientPlatforms[name] === "android" ? (
+                        <span className={s.clientDeviceBadge} aria-label="Мобильный клиент">
+                          <svg
+                            width="9"
+                            height="9"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.1"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+                            <line x1="11" y1="18" x2="13" y2="18" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <span
+                          className={`${s.clientOnlineDot} ${!isOnline ? s.clientOfflineDot : ""}`}
+                          aria-hidden="true"
+                        />
+                      )}
                     </div>
-                    {clientPlatforms[name] === "android" ? (
-                      <span className={s.clientDeviceBadge} aria-label="Мобильный клиент">
-                        <svg
-                          width="9"
-                          height="9"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.1"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
-                          <line x1="11" y1="18" x2="13" y2="18" />
-                        </svg>
+                    <div className={s.clientInfo}>
+                      <span className={s.clientName}>{name}</span>
+                      <span className={s.clientPresenceText}>
+                        {isOnline ? "В сети" : "Offline"}
                       </span>
-                    ) : (
-                      <span
-                        className={`${s.clientOnlineDot} ${!isOnline ? s.clientOfflineDot : ""}`}
-                        aria-hidden="true"
-                      />
-                    )}
-                  </div>
-                  <div className={s.clientInfo}>
-                    <span className={s.clientName}>{name}</span>
-                    <span className={s.clientPresenceText}>
-                      {isOnline ? "В сети" : "Offline"}
-                    </span>
-                  </div>
-                  <div className={s.clientAction}>
-                    {isSelected ? (
-                      <span className={s.selectedBadge}>в группе</span>
-                    ) : null}
-                  </div>
-                </button>
-              );
+                    </div>
+                    <div className={s.clientAction}>
+                      {isSelected && (
+                        <span className={s.selectedBadge}>В ГРУППЕ</span>
+                      )}
+                    </div>
+                  </button>
+                );
               })
             )}
           </div>
         </div>
       </div>
 
-      {/* Режим группы */}
-      <div className={s.section}>
+      <div className={`${s.section} ${s.surfaceSection}`}>
         <div className={s.sectionTitle}>Адресаты</div>
         <div className={s.groupModes}>
           {(["all", "none", "custom"] as GroupMode[]).map((mode) => {

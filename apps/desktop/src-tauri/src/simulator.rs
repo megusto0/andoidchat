@@ -23,6 +23,8 @@ const SIMULATION_WINDOW_SECS: u64 = 12;
 const POST_CONNECT_SETTLE_MS: u64 = 450;
 const MESSAGE_INTERVAL_BASE_MS: u64 = 650;
 const MESSAGE_INTERVAL_STEP_MS: u64 = 45;
+const SHUTDOWN_DRAIN_TIMEOUT_MS: u64 = 1400;
+const SHUTDOWN_DRAIN_POLL_MS: u64 = 70;
 
 /// Метрики симуляции, отправляемые в React.
 #[derive(Debug, Clone, Serialize)]
@@ -37,6 +39,8 @@ pub struct SimMetrics {
     pub server_responses_confirmed: u32,
     pub incorrect_responses: u32,
     pub avg_response_ms: f64,
+    pub p50_response_ms: f64,
+    pub p95_response_ms: f64,
     pub messages_per_second: f64,
     pub elapsed_seconds: f64,
     pub phase: String,
@@ -55,6 +59,8 @@ impl Default for SimMetrics {
             server_responses_confirmed: 0,
             incorrect_responses: 0,
             avg_response_ms: 0.0,
+            p50_response_ms: 0.0,
+            p95_response_ms: 0.0,
             messages_per_second: 0.0,
             elapsed_seconds: 0.0,
             phase: "idle".to_string(),
@@ -368,6 +374,23 @@ async fn run_bot(
         tokio::time::sleep(Duration::from_millis(interval_ms)).await;
     }
 
+    if !had_runtime_error {
+        let deadline = Instant::now() + Duration::from_millis(SHUTDOWN_DRAIN_TIMEOUT_MS);
+        loop {
+            let echoes_left = pending_echoes.lock().await.len();
+            let server_left = pending_server.lock().await.len();
+
+            if (echoes_left == 0 && server_left == 0)
+                || sim.cancel.load(AtomicOrdering::Relaxed)
+                || Instant::now() >= deadline
+            {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(SHUTDOWN_DRAIN_POLL_MS)).await;
+        }
+    }
+
     let leftover_echoes = pending_echoes.lock().await.len() as u32;
     let leftover_server = pending_server.lock().await.len() as u32;
     if leftover_echoes > 0 || leftover_server > 0 {
@@ -405,12 +428,15 @@ async fn detect_phase(sim: &Arc<SimState>) -> &'static str {
 
 async fn snapshot_metrics(sim: &Arc<SimState>, start: Instant, phase: &str) -> SimMetrics {
     let bots = sim.bots.lock().await.clone();
-    let response_times = sim.response_times_ms.lock().await.clone();
+    let mut response_times = sim.response_times_ms.lock().await.clone();
     let avg_response_ms = if response_times.is_empty() {
         0.0
     } else {
         response_times.iter().sum::<f64>() / response_times.len() as f64
     };
+    response_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let p50_response_ms = percentile(&response_times, 0.50);
+    let p95_response_ms = percentile(&response_times, 0.95);
 
     let elapsed_seconds = start.elapsed().as_secs_f64();
     let messages_received = sim.messages_received.load(AtomicOrdering::Relaxed);
@@ -432,6 +458,8 @@ async fn snapshot_metrics(sim: &Arc<SimState>, start: Instant, phase: &str) -> S
             .load(AtomicOrdering::Relaxed),
         incorrect_responses: sim.incorrect_responses.load(AtomicOrdering::Relaxed),
         avg_response_ms,
+        p50_response_ms,
+        p95_response_ms,
         messages_per_second,
         elapsed_seconds,
         phase: phase.to_string(),
@@ -542,4 +570,13 @@ fn transform_word(word: &str) -> String {
 fn is_palindrome(word: &str) -> bool {
     let lowered = word.to_lowercase();
     lowered.chars().eq(lowered.chars().rev())
+}
+
+fn percentile(values: &[f64], ratio: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+
+    let index = ((values.len() - 1) as f64 * ratio).round() as usize;
+    values[index.min(values.len() - 1)]
 }
