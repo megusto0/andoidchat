@@ -16,6 +16,7 @@ data class MessageItem(
     val sender: String,
     val text: String,
     val timestampMillis: Long = System.currentTimeMillis(),
+    val simulationId: String? = null,
 )
 
 enum class ChatContextKind {
@@ -37,6 +38,7 @@ data class ChatContext(
 data class PendingOwnMessage(
     val chatId: String,
     val text: String,
+    val localMessageId: String,
 )
 
 data class HistoryMessage(
@@ -129,6 +131,7 @@ sealed interface ChatAction {
         val mode: GroupMode,
         val targets: List<String>,
         val timestampMillis: Long = System.currentTimeMillis(),
+        val simulationId: String? = null,
     ) : ChatAction
 
     data class HistorySynced(
@@ -182,6 +185,7 @@ sealed interface ServerEvent {
         val mode: GroupMode,
         val targets: List<String>,
         val timestampMillis: Long,
+        val simulationId: String? = null,
     ) : ServerEvent
 
     data class Clients(val names: List<String>) : ServerEvent

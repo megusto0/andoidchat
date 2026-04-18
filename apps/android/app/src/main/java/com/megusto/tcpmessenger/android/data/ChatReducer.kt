@@ -84,6 +84,35 @@ object ChatReducer {
                         pending.chatId == descriptor.id && pending.text == action.text
                     }
                     if (pendingIndex != -1) {
+                        val pending = state.pendingOwnMessages[pendingIndex]
+                        val currentChat = state.chats[descriptor.id]
+                        if (currentChat != null) {
+                            val reconciledMessages = currentChat.messages
+                                .map { message ->
+                                    if (message.id == pending.localMessageId) {
+                                        message.copy(timestampMillis = action.timestampMillis)
+                                    } else {
+                                        message
+                                    }
+                                }
+                                .sortedBy(MessageItem::timestampMillis)
+
+                            val updatedChat = currentChat.copy(
+                                messages = reconciledMessages,
+                                lastActivityAt = reconciledMessages.lastOrNull()?.timestampMillis
+                                    ?: currentChat.lastActivityAt,
+                            )
+                            val chats = state.chats + (descriptor.id to updatedChat)
+
+                            return state.copy(
+                                chats = chats,
+                                chatOrder = sortChatOrder(chats),
+                                pendingOwnMessages = state.pendingOwnMessages.filterIndexed { index, _ ->
+                                    index != pendingIndex
+                                },
+                            )
+                        }
+
                         return state.copy(
                             pendingOwnMessages = state.pendingOwnMessages.filterIndexed { index, _ ->
                                 index != pendingIndex
@@ -100,6 +129,7 @@ object ChatReducer {
                         sender = action.sender,
                         text = action.text,
                         timestampMillis = action.timestampMillis,
+                        simulationId = action.simulationId,
                     ),
                     markUnread = state.activeChatId != descriptor.id,
                 )
@@ -260,10 +290,15 @@ object ChatReducer {
                     mode = action.mode,
                     targets = action.targets,
                 )
+                val optimisticMessage = makeMessage(
+                    type = MessageType.OWN,
+                    sender = state.userName,
+                    text = action.text,
+                )
                 val update = appendMessageToChat(
                     state = state,
                     descriptor = descriptor,
-                    message = makeMessage(MessageType.OWN, state.userName, action.text),
+                    message = optimisticMessage,
                     activate = true,
                 )
 
@@ -274,6 +309,7 @@ object ChatReducer {
                     pendingOwnMessages = state.pendingOwnMessages + PendingOwnMessage(
                         chatId = descriptor.id,
                         text = action.text,
+                        localMessageId = optimisticMessage.id,
                     ),
                     groupMode = action.mode,
                     selectedClients = if (action.mode == GroupMode.ALL) {
@@ -324,12 +360,14 @@ object ChatReducer {
         sender: String,
         text: String,
         timestampMillis: Long = System.currentTimeMillis(),
+        simulationId: String? = null,
     ): MessageItem = MessageItem(
         id = UUID.randomUUID().toString(),
         type = type,
         sender = sender,
         text = text,
         timestampMillis = timestampMillis,
+        simulationId = simulationId,
     )
 
     private fun setsEqual(a: Set<String>, b: Set<String>): Boolean {
@@ -578,7 +616,7 @@ object ChatReducer {
     }
 
     private fun messageDedupKey(message: MessageItem): String =
-        message.sender + "|" + message.timestampMillis + "|" + message.text
+        message.sender + "|" + message.timestampMillis + "|" + message.text + "|" + (message.simulationId ?: "")
 
     private fun mergeMessages(
         existing: List<MessageItem>,

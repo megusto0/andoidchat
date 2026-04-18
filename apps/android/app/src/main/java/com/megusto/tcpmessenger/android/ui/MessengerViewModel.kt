@@ -176,6 +176,7 @@ class MessengerViewModel : ViewModel() {
                     mode = event.mode,
                     targets = event.targets,
                     timestampMillis = event.timestampMillis,
+                    simulationId = event.simulationId,
                 ),
             )
             is ServerEvent.SyncHistory -> {

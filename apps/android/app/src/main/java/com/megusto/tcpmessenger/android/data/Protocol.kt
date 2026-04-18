@@ -93,6 +93,7 @@ object MessengerProtocol {
                     mode = GroupMode.fromProtocolValue(parsed.optString("mode")),
                     targets = targets,
                     timestampMillis = parsed.optLong("timestamp", System.currentTimeMillis()),
+                    simulationId = parsed.optString("simulationId").takeIf { it.isNotBlank() },
                 )
             }
         } catch (_: JSONException) {
@@ -107,6 +108,7 @@ object MessengerProtocol {
                 mode = GroupMode.ALL,
                 targets = emptyList(),
                 timestampMillis = System.currentTimeMillis(),
+                simulationId = null,
             )
         } else {
             ServerEvent.Message(
@@ -115,6 +117,7 @@ object MessengerProtocol {
                 mode = GroupMode.ALL,
                 targets = emptyList(),
                 timestampMillis = System.currentTimeMillis(),
+                simulationId = null,
             )
         }
     }

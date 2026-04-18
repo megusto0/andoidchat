@@ -76,8 +76,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +122,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val SimulationOutline = Color(0xFF63D6D0)
 
 @Composable
 fun ChatScreen(
@@ -892,6 +898,7 @@ private fun MessageBubble(
             text = message.text,
             time = timeLabel,
             showTime = isLastInGroup,
+            isSimulation = message.simulationId != null,
         )
 
         MessageType.OTHER -> IncomingBubble(
@@ -901,12 +908,18 @@ private fun MessageBubble(
             showSender = isFirstInGroup,
             showTime = isLastInGroup,
             showAvatar = isFirstInGroup,
+            isSimulation = message.simulationId != null,
         )
     }
 }
 
 @Composable
-private fun OwnBubble(text: String, time: String, showTime: Boolean) {
+private fun OwnBubble(
+    text: String,
+    time: String,
+    showTime: Boolean,
+    isSimulation: Boolean,
+) {
     val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 4.dp, bottomStart = 16.dp)
     Row(
         modifier = Modifier
@@ -923,16 +936,22 @@ private fun OwnBubble(text: String, time: String, showTime: Boolean) {
                     .clip(shape)
                     .background(AccentMuted)
                     .border(1.dp, AccentBorder, shape)
+                    .simulationBubbleOutline(shape = shape, enabled = isSimulation)
                     .padding(horizontal = 13.dp, vertical = 9.dp),
             ) {
-                Text(
-                    text = text,
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        color = TextPrimary,
-                    ),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (isSimulation) {
+                        SimulationBadge()
+                    }
+                    Text(
+                        text = text,
+                        style = TextStyle(
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = TextPrimary,
+                        ),
+                    )
+                }
             }
             if (showTime) {
                 Spacer(Modifier.height(3.dp))
@@ -958,6 +977,7 @@ private fun IncomingBubble(
     showSender: Boolean,
     showTime: Boolean,
     showAvatar: Boolean,
+    isSimulation: Boolean,
 ) {
     val isServer = sender == "Server"
     val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp)
@@ -994,27 +1014,33 @@ private fun IncomingBubble(
                     .clip(shape)
                     .background(ElevatedCard)
                     .border(1.dp, BorderSoft, shape)
+                    .simulationBubbleOutline(shape = shape, enabled = isSimulation)
                     .padding(horizontal = 13.dp, vertical = 9.dp),
             ) {
-                Row(verticalAlignment = Alignment.Top) {
-                    if (isServer && showSender) {
-                        Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = null,
-                            tint = InfoBlue,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .padding(end = 6.dp, top = 3.dp),
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (isSimulation) {
+                        SimulationBadge()
+                    }
+                    Row(verticalAlignment = Alignment.Top) {
+                        if (isServer && showSender) {
+                            Icon(
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = null,
+                                tint = InfoBlue,
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .padding(end = 6.dp, top = 3.dp),
+                            )
+                        }
+                        Text(
+                            text = text,
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                color = TextPrimary,
+                            ),
                         )
                     }
-                    Text(
-                        text = text,
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = TextPrimary,
-                        ),
-                    )
                 }
             }
             if (showTime) {
@@ -1030,6 +1056,75 @@ private fun IncomingBubble(
                 )
             }
         }
+    }
+}
+
+private fun Modifier.simulationBubbleOutline(
+    shape: RoundedCornerShape,
+    enabled: Boolean,
+): Modifier = if (!enabled) {
+    this
+} else {
+    drawBehind {
+        val stroke = Stroke(
+            width = 1.4.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f)),
+        )
+        when (val outline = shape.createOutline(size, layoutDirection, this)) {
+            is Outline.Rounded -> {
+                val roundRect = outline.roundRect
+                drawRoundRect(
+                    color = SimulationOutline,
+                    topLeft = Offset(roundRect.left, roundRect.top),
+                    size = Size(roundRect.width, roundRect.height),
+                    cornerRadius = roundRect.topLeftCornerRadius,
+                    style = stroke,
+                )
+            }
+
+            is Outline.Rectangle -> {
+                val rect = outline.rect
+                drawRect(
+                    color = SimulationOutline,
+                    topLeft = Offset(rect.left, rect.top),
+                    size = Size(rect.width, rect.height),
+                    style = stroke,
+                )
+            }
+
+            is Outline.Generic -> {
+                drawPath(
+                    path = outline.path,
+                    color = SimulationOutline,
+                    style = stroke,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimulationBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Accent.copy(alpha = 0.12f))
+            .border(
+                width = 1.dp,
+                color = Accent.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(999.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = "СИМУЛЯЦИЯ",
+            style = TextStyle(
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.7.sp,
+            ),
+            color = Accent,
+        )
     }
 }
 
