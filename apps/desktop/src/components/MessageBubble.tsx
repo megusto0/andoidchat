@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Message } from "../types";
 import s from "./MessageBubble.module.css";
 
@@ -7,6 +8,7 @@ interface Props {
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   isOnline?: boolean;
+  animate?: boolean;
 }
 
 function pad(n: number): string {
@@ -23,11 +25,12 @@ function getMonogramHue(name: string): number {
   return (name.charCodeAt(0) * 47) % 360;
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message,
   isFirstInGroup = true,
   isLastInGroup = true,
   isOnline = false,
+  animate = true,
 }: Props) {
   const isOwn = message.type === "own";
   const isOther = message.type === "other";
@@ -101,7 +104,11 @@ export function MessageBubble({
   const hue = getMonogramHue(message.sender);
 
   return (
-    <div className={`${s.row} ${isOwn ? s.rowOwn : s.rowOther} ${spacingClass}`}>
+    <div
+      className={`${s.row} ${isOwn ? s.rowOwn : s.rowOther} ${spacingClass} ${
+        animate ? "" : s.rowStatic
+      }`}
+    >
       {isOther && (
         isFirstInGroup ? (
           <div className={s.avatar} style={{ background: `oklch(0.32 0.04 ${hue})`, color: `oklch(0.85 0.05 ${hue})` }}>
@@ -131,3 +138,5 @@ export function MessageBubble({
     </div>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleInner);

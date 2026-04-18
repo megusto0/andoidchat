@@ -1,4 +1,4 @@
-import type { BotStatus } from "../hooks/useSimulation";
+import type { SimBotStatus as BotStatus } from "../types";
 import s from "./ConnectionGraph.module.css";
 
 interface Props {

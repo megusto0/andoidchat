@@ -15,6 +15,14 @@ console_state = {
     "group_mode": "all",
     "group_target": "",
     "client_name": "",
+    "simulation_mode": "visible",
+    "simulation_last_phase": "",
+    "simulation_last_second": -1,
+}
+
+SIMULATION_MODE_LABELS = {
+    "visible": "Visible",
+    "benchmark": "Benchmark",
 }
 
 RESET = "\033[0m"
@@ -211,8 +219,167 @@ def show_help():
         + FG_CYAN + "  /group all" + DIM + "         - отправлять новые сообщения всем клиентам\n"
         + FG_CYAN + "  /group none" + DIM + "        - отправлять новые сообщения только себе\n"
         + FG_CYAN + "  /group Ivan,Anna" + DIM + "   - отправлять сообщения указанным клиентам\n"
+        + FG_CYAN + "  /simulate visible 55" + DIM + "   - видимая симуляция на 55 ботах\n"
+        + FG_CYAN + "  /simulate benchmark 55" + DIM + " - benchmark-режим на 55 ботах\n"
+        + FG_CYAN + "  /simulate 55" + DIM + "          - то же, что /simulate visible 55\n"
+        + FG_CYAN + "  /simulate stop" + DIM + "     - остановить текущую серверную симуляцию\n"
         + FG_CYAN + "  /exit" + DIM + "              - выйти из программы\n"
         + DIM + "  Любой другой текст отправляется как обычное сообщение." + RESET
+    )
+
+
+def render_simulation_result(payload):
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        print_block("[Симуляция] ", "Получен некорректный пакет метрик.", FG_RED)
+        return
+
+    if not isinstance(parsed, dict):
+        print_block("[Симуляция] ", "Получен неожиданный формат метрик.", FG_RED)
+        return
+
+    mode = str(parsed.get("mode", "visible")).lower()
+    mode_label = SIMULATION_MODE_LABELS.get(mode, mode)
+    rows = [
+        ("Режим", mode_label),
+        ("Фаза", str(parsed.get("phase", "unknown"))),
+        ("Запрошено ботов", str(parsed.get("requestedClients", 0))),
+        ("Успешных подключений", str(parsed.get("totalConnected", 0))),
+        ("Неудачных подключений", str(parsed.get("failedConnections", 0))),
+        ("Сообщений от ботов", str(parsed.get("messagesSent", 0))),
+        ("Доставлено ботам", str(parsed.get("messagesReceived", 0))),
+        ("Доставлено watcher-у", str(parsed.get("watcherDeliveries", 0))),
+        ("Подтверждено ответов сервера", str(parsed.get("serverResponsesConfirmed", 0))),
+        ("Ошибок проверки", str(parsed.get("incorrectResponses", 0))),
+        ("Средний отклик, мс", f"{float(parsed.get('avgResponseMs', 0.0)):.2f}"),
+        ("P50 отклика, мс", f"{float(parsed.get('p50ResponseMs', 0.0)):.2f}"),
+        ("P95 отклика, мс", f"{float(parsed.get('p95ResponseMs', 0.0)):.2f}"),
+        ("Пакетов/сек", f"{float(parsed.get('messagesPerSecond', 0.0)):.2f}"),
+        ("Длительность, сек", f"{float(parsed.get('elapsedSeconds', 0.0)):.2f}"),
+    ]
+
+    label_width = max(len(label) for label, _ in rows)
+    lines = []
+    for label, value in rows:
+        lines.append(f"{label:<{label_width}} : {value}")
+
+    passed = bool(parsed.get("passed"))
+    status_text = "ПРОЙДЕН" if passed else "НЕ ПРОЙДЕН"
+    status_color = FG_GREEN if passed else FG_RED
+    print_block("[Симуляция] ", f"{status_text}\n" + "\n".join(lines), status_color)
+
+
+def handle_simulation_command(sock, user_input):
+    payload = user_input[len("/simulate"):].strip()
+
+    if payload == "":
+        mode = "visible"
+        count = 55
+        send_line(
+            sock,
+            "SIMULATE|" + json.dumps(
+                {"mode": mode, "count": count},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
+        with print_lock:
+            console_state["simulation_mode"] = mode
+            console_state["simulation_last_phase"] = ""
+            console_state["simulation_last_second"] = -1
+        print_block("[Система] ", f"Запрос серверной симуляции ({mode}): {count} ботов.", FG_CYAN)
+        return
+
+    if payload.lower() == "stop":
+        send_line(sock, "SIMULATE|stop")
+        print_block("[Система] ", "Отправлен запрос на остановку симуляции.", FG_CYAN)
+        return
+
+    parts = payload.split()
+    if len(parts) == 1:
+        mode = "visible"
+        raw_count = parts[0]
+    elif len(parts) == 2:
+        mode = parts[0].strip().lower()
+        raw_count = parts[1]
+    else:
+        safe_print("Пример: /simulate visible 55\nПример: /simulate benchmark 55\nПример: /simulate stop")
+        return
+
+    if mode == "observe":
+        mode = "visible"
+    elif mode == "load":
+        mode = "benchmark"
+
+    if mode not in {"visible", "benchmark"}:
+        safe_print("Режим симуляции: visible или benchmark.")
+        return
+
+    try:
+        count = int(raw_count)
+    except ValueError:
+        safe_print("Пример: /simulate visible 55\nПример: /simulate benchmark 55\nПример: /simulate stop")
+        return
+
+    send_line(
+        sock,
+        "SIMULATE|" + json.dumps(
+            {"mode": mode, "count": count},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+    )
+    with print_lock:
+        console_state["simulation_mode"] = mode
+        console_state["simulation_last_phase"] = ""
+        console_state["simulation_last_second"] = -1
+    print_block("[Система] ", f"Запрос серверной симуляции ({mode}): {count} ботов.", FG_CYAN)
+
+
+def render_simulation_metrics(payload):
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return
+
+    if not isinstance(parsed, dict):
+        return
+
+    phase = str(parsed.get("phase", "unknown"))
+    elapsed_seconds = float(parsed.get("elapsedSeconds", 0.0))
+    elapsed_mark = int(elapsed_seconds)
+    mode = str(parsed.get("mode", "visible"))
+    mode_label = SIMULATION_MODE_LABELS.get(mode, mode)
+    requested = int(parsed.get("requestedClients", 0))
+    connected = int(parsed.get("totalConnected", 0))
+    watcher_deliveries = int(parsed.get("watcherDeliveries", 0))
+    packets_per_second = float(parsed.get("messagesPerSecond", 0.0))
+    p95 = float(parsed.get("p95ResponseMs", 0.0))
+
+    with print_lock:
+        previous_phase = console_state["simulation_last_phase"]
+        previous_second = console_state["simulation_last_second"]
+        should_print = phase != previous_phase or elapsed_mark != previous_second
+        console_state["simulation_last_phase"] = phase
+        console_state["simulation_last_second"] = elapsed_mark
+        console_state["simulation_mode"] = mode
+
+    if not should_print:
+        return
+
+    print_block(
+        "[Симуляция] ",
+        (
+            f"{mode_label} · {phase} · {connected}/{requested} подключено · "
+            + (
+                f"watcher {watcher_deliveries} · "
+                if mode == "visible"
+                else ""
+            )
+            + f"{packets_per_second:.1f} pkt/s · p95 {p95:.1f} мс · t={elapsed_seconds:.1f}с"
+        ),
+        FG_MAGENTA,
     )
 
 
@@ -263,9 +430,14 @@ def receive_messages(reader, stop_event):
                         print_block("[Сервер] ", "История синхронизирована: " + str(count) + " сообщений.", FG_CYAN)
                 except json.JSONDecodeError:
                     pass
+            elif command == "SIMULATION_METRICS":
+                render_simulation_metrics(payload)
+            elif command == "SIMULATION_RESULT":
+                render_simulation_result(payload)
             elif command == "MESSAGE":
                 sender_name = "Неизвестно"
                 message_text = decode_text(payload)
+                simulation_id = None
 
                 try:
                     parsed = json.loads(payload)
@@ -276,12 +448,18 @@ def receive_messages(reader, stop_event):
                     ):
                         sender_name = parsed["sender"]
                         message_text = parsed["content"]
+                        if isinstance(parsed.get("simulationId"), str):
+                            simulation_id = parsed["simulationId"]
                 except json.JSONDecodeError:
                     parts = payload.split("|", 1)
 
                     if len(parts) == 2:
                         sender_name = parts[0]
                         message_text = decode_text(parts[1])
+
+                if simulation_id is not None:
+                    print_block(f"[Visible {sender_name}] ", message_text, FG_MAGENTA)
+                    continue
 
                 with print_lock:
                     own_name = console_state["client_name"]
@@ -474,6 +652,10 @@ def main():
 
             if user_input.startswith("/group"):
                 handle_group_command(client_socket, user_input)
+                continue
+
+            if user_input.startswith("/simulate"):
+                handle_simulation_command(client_socket, user_input)
                 continue
 
             if user_input in ("/exit", "/quit"):

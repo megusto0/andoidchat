@@ -7,6 +7,10 @@
   animation: slideUp 180ms var(--ease-out) forwards;
 }
 
+.rowStatic {
+  animation: none;
+}
+
 .rowGrouped {
   padding-top: 0;
 }

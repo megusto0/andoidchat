@@ -39,7 +39,13 @@ export function decodeEscapedText(raw: string): string {
   return result.join("");
 }
 
-import type { ClientPlatform, HistoryMessage, ParsedPacket } from "../types";
+import type {
+  ClientPlatform,
+  HistoryMessage,
+  ParsedPacket,
+  SimMetrics,
+  SimulationMode,
+} from "../types";
 
 function normalizeMode(value: unknown): "all" | "none" | "custom" {
   if (value === "all" || value === "none" || value === "custom") {
@@ -53,6 +59,115 @@ function normalizeClientPlatform(value: unknown): ClientPlatform {
     return value;
   }
   return "unknown";
+}
+
+function normalizeSimulationMode(value: unknown): SimulationMode {
+  if (value === "visible" || value === "benchmark") {
+    return value;
+  }
+  if (value === "observe") {
+    return "visible";
+  }
+  if (value === "load") {
+    return "benchmark";
+  }
+  return "visible";
+}
+
+const EMPTY_SIM_METRICS: SimMetrics = {
+  requestedClients: 0,
+  mode: "visible",
+  activeClients: 0,
+  totalConnected: 0,
+  failedConnections: 0,
+  messagesSent: 0,
+  messagesReceived: 0,
+  watcherDeliveries: 0,
+  echoConfirmed: 0,
+  serverResponsesConfirmed: 0,
+  incorrectResponses: 0,
+  avgResponseMs: 0,
+  p50ResponseMs: 0,
+  p95ResponseMs: 0,
+  messagesPerSecond: 0,
+  elapsedSeconds: 0,
+  phase: "idle",
+  botStatuses: [],
+  passed: false,
+};
+
+function parseSimMetricsPayload(payload: string): SimMetrics | null {
+  try {
+    const parsed = JSON.parse(payload);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      requestedClients:
+        typeof parsed.requestedClients === "number" ? parsed.requestedClients : 0,
+      mode: normalizeSimulationMode(parsed.mode),
+      activeClients:
+        typeof parsed.activeClients === "number" ? parsed.activeClients : 0,
+      totalConnected:
+        typeof parsed.totalConnected === "number" ? parsed.totalConnected : 0,
+      failedConnections:
+        typeof parsed.failedConnections === "number" ? parsed.failedConnections : 0,
+      messagesSent:
+        typeof parsed.messagesSent === "number" ? parsed.messagesSent : 0,
+      messagesReceived:
+        typeof parsed.messagesReceived === "number" ? parsed.messagesReceived : 0,
+      watcherDeliveries:
+        typeof parsed.watcherDeliveries === "number" ? parsed.watcherDeliveries : 0,
+      echoConfirmed:
+        typeof parsed.echoConfirmed === "number" ? parsed.echoConfirmed : 0,
+      serverResponsesConfirmed:
+        typeof parsed.serverResponsesConfirmed === "number"
+          ? parsed.serverResponsesConfirmed
+          : 0,
+      incorrectResponses:
+        typeof parsed.incorrectResponses === "number"
+          ? parsed.incorrectResponses
+          : 0,
+      avgResponseMs:
+        typeof parsed.avgResponseMs === "number" ? parsed.avgResponseMs : 0,
+      p50ResponseMs:
+        typeof parsed.p50ResponseMs === "number" ? parsed.p50ResponseMs : 0,
+      p95ResponseMs:
+        typeof parsed.p95ResponseMs === "number" ? parsed.p95ResponseMs : 0,
+      messagesPerSecond:
+        typeof parsed.messagesPerSecond === "number"
+          ? parsed.messagesPerSecond
+          : 0,
+      elapsedSeconds:
+        typeof parsed.elapsedSeconds === "number" ? parsed.elapsedSeconds : 0,
+      phase: typeof parsed.phase === "string" ? parsed.phase : "idle",
+      botStatuses: Array.isArray(parsed.botStatuses)
+        ? parsed.botStatuses.flatMap((bot: unknown) => {
+            if (!bot || typeof bot !== "object") {
+              return [];
+            }
+
+            const raw = bot as Record<string, unknown>;
+            if (typeof raw.name !== "string" || typeof raw.status !== "string") {
+              return [];
+            }
+
+            return [
+              {
+                name: raw.name,
+                status: raw.status,
+                messagesSent:
+                  typeof raw.messagesSent === "number" ? raw.messagesSent : 0,
+              },
+            ];
+          })
+        : [],
+      passed: Boolean(parsed.passed),
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 /** Разбирает пакет сервера по команде и полезной нагрузке. */
@@ -93,6 +208,14 @@ export function parseServerPacket(
               typeof parsed.timestamp === "number"
                 ? parsed.timestamp
                 : Date.now(),
+            simulationId:
+              typeof parsed.simulationId === "string"
+                ? parsed.simulationId
+                : null,
+            simulationMode:
+              typeof parsed.simulationMode === "string"
+                ? normalizeSimulationMode(parsed.simulationMode)
+                : null,
           };
         }
       } catch (_) {
@@ -108,6 +231,8 @@ export function parseServerPacket(
           mode: "all",
           targets: [],
           timestampMs: Date.now(),
+          simulationId: null,
+          simulationMode: null,
         };
       }
       return {
@@ -117,6 +242,8 @@ export function parseServerPacket(
         mode: "all",
         targets: [],
         timestampMs: Date.now(),
+        simulationId: null,
+        simulationMode: null,
       };
     }
 
@@ -201,6 +328,18 @@ export function parseServerPacket(
 
       return { kind: "sync_history", messages: [] };
     }
+
+    case "SIMULATION_METRICS":
+      return {
+        kind: "simulation_metrics",
+        metrics: parseSimMetricsPayload(payload) ?? EMPTY_SIM_METRICS,
+      };
+
+    case "SIMULATION_RESULT":
+      return {
+        kind: "simulation_result",
+        result: parseSimMetricsPayload(payload) ?? EMPTY_SIM_METRICS,
+      };
 
     default:
       return { kind: "info", text: `${command}|${payload}` };

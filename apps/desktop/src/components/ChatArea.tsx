@@ -1,3 +1,4 @@
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { Message } from "../types";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { MessageBubble } from "./MessageBubble";
@@ -12,9 +13,48 @@ function isGroupable(type: string): boolean {
   return type === "own" || type === "other";
 }
 
-export function ChatArea({ messages, ownName }: Props) {
+function ChatAreaInner({ messages, ownName }: Props) {
+  const previousLengthRef = useRef(0);
   const { containerRef, showScrollButton, scrollToBottom } =
     useAutoScroll(messages.length);
+  const isBulkRestore =
+    messages.length > 40 && messages.length - previousLengthRef.current > 20;
+
+  useEffect(() => {
+    previousLengthRef.current = messages.length;
+  }, [messages.length]);
+
+  const renderedMessages = useMemo(
+    () =>
+      messages.map((msg, i) => {
+        const prev = messages[i - 1];
+        const next = messages[i + 1];
+
+        const isFirstInGroup =
+          !isGroupable(msg.type) ||
+          !prev ||
+          prev.type !== msg.type ||
+          prev.sender !== msg.sender;
+
+        const isLastInGroup =
+          !isGroupable(msg.type) ||
+          !next ||
+          next.type !== msg.type ||
+          next.sender !== msg.sender;
+
+        return (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            ownName={ownName}
+            isFirstInGroup={isFirstInGroup}
+            isLastInGroup={isLastInGroup}
+            animate={!isBulkRestore}
+          />
+        );
+      }),
+    [isBulkRestore, messages, ownName]
+  );
 
   return (
     <div className={s.wrapper}>
@@ -32,32 +72,7 @@ export function ChatArea({ messages, ownName }: Props) {
             </div>
           </div>
         ) : (
-          messages.map((msg, i) => {
-            const prev = messages[i - 1];
-            const next = messages[i + 1];
-
-            const isFirstInGroup =
-              !isGroupable(msg.type) ||
-              !prev ||
-              prev.type !== msg.type ||
-              prev.sender !== msg.sender;
-
-            const isLastInGroup =
-              !isGroupable(msg.type) ||
-              !next ||
-              next.type !== msg.type ||
-              next.sender !== msg.sender;
-
-            return (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                ownName={ownName}
-                isFirstInGroup={isFirstInGroup}
-                isLastInGroup={isLastInGroup}
-              />
-            );
-          })
+          renderedMessages
         )}
       </div>
       {showScrollButton && (
@@ -71,3 +86,5 @@ export function ChatArea({ messages, ownName }: Props) {
     </div>
   );
 }
+
+export const ChatArea = memo(ChatAreaInner);

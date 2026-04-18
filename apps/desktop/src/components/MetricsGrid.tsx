@@ -1,4 +1,4 @@
-import type { SimMetrics } from "../hooks/useSimulation";
+import type { SimMetrics } from "../types";
 import s from "./MetricsGrid.module.css";
 
 interface Props {

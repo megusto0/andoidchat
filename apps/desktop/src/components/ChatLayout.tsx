@@ -10,6 +10,7 @@ import s from "./ChatLayout.module.css";
 interface Props {
   state: ChatState;
   sendMessage: (text: string, mode: GroupMode, targets: string[]) => void;
+  sendCommand: (raw: string) => Promise<void> | void;
   disconnect: () => void;
   setGroup: (mode: GroupMode, selected: Set<string>) => void;
   switchChat: (chatId: string) => void;
@@ -19,6 +20,7 @@ interface Props {
 export function ChatLayout({
   state,
   sendMessage,
+  sendCommand,
   disconnect,
   setGroup,
   switchChat,
@@ -162,7 +164,10 @@ export function ChatLayout({
           />
         </div>
         {state.showVisualization && (
-          <VisualizationPanel onClose={toggleVisualization} />
+          <VisualizationPanel
+            onClose={toggleVisualization}
+            sendCommand={sendCommand}
+          />
         )}
       </div>
     </>

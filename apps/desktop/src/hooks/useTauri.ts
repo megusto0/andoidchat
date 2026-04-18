@@ -1,10 +1,16 @@
 /**
  * Хук для работы с Tauri API: вызов команд и polling очереди пакетов из Rust.
  */
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, startTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ChatAction, ClientPlatform } from "../types";
 import { parseServerPacket } from "../utils/protocol";
+import {
+  pushSimulationFeedMessage,
+  pushSimulationMetrics,
+  pushSimulationResult,
+  resetSimulationState,
+} from "../utils/simulationBus";
 
 interface ConnectResult {
   name: string;
@@ -26,6 +32,38 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
   const listPollRef = useRef<number | null>(null);
   const packetPollRef = useRef<number | null>(null);
   const connectedRef = useRef(false);
+  const lastClientsKeyRef = useRef("");
+  const lastPlatformsKeyRef = useRef("");
+
+  const makeClientsKey = useCallback((clients: string[]) => clients.join("\u0000"), []);
+  const makePlatformsKey = useCallback(
+    (platforms: Record<string, ClientPlatform>) =>
+      Object.entries(platforms)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, platform]) => `${name}:${platform}`)
+        .join("\u0000"),
+    []
+  );
+
+  const dispatchClientsIfChanged = useCallback(
+    (clients: string[]) => {
+      const nextKey = makeClientsKey(clients);
+      if (nextKey === lastClientsKeyRef.current) return;
+      lastClientsKeyRef.current = nextKey;
+      dispatch({ type: "CLIENTS_UPDATED", clients });
+    },
+    [dispatch, makeClientsKey]
+  );
+
+  const dispatchPlatformsIfChanged = useCallback(
+    (platforms: Record<string, ClientPlatform>) => {
+      const nextKey = makePlatformsKey(platforms);
+      if (nextKey === lastPlatformsKeyRef.current) return;
+      lastPlatformsKeyRef.current = nextKey;
+      dispatch({ type: "CLIENT_PLATFORMS_UPDATED", platforms });
+    },
+    [dispatch, makePlatformsKey]
+  );
 
   const stopClientListPolling = useCallback(() => {
     if (listPollRef.current !== null) {
@@ -56,12 +94,12 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
         invoke<string[]>("get_clients"),
         invoke<Record<string, ClientPlatform>>("get_client_platforms"),
       ]);
-      dispatch({ type: "CLIENTS_UPDATED", clients });
-      dispatch({ type: "CLIENT_PLATFORMS_UPDATED", platforms: clientPlatforms });
+      dispatchClientsIfChanged(clients);
+      dispatchPlatformsIfChanged(clientPlatforms);
     } catch (_) {
       /* */
     }
-  }, [dispatch]);
+  }, [dispatchClientsIfChanged, dispatchPlatformsIfChanged]);
 
   const startClientListPolling = useCallback(() => {
     stopClientListPolling();
@@ -77,8 +115,11 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
       for (const packet of packets) {
         if (packet.command === "DISCONNECTED") {
           connectedRef.current = false;
+          lastClientsKeyRef.current = "";
+          lastPlatformsKeyRef.current = "";
           stopClientListPolling();
           stopPacketPolling();
+          resetSimulationState();
           dispatch({ type: "DISCONNECTED" });
           continue;
         }
@@ -96,6 +137,15 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
             dispatch({ type: "ERROR_RECEIVED", text: parsed.text });
             break;
           case "message":
+            if (parsed.simulationId) {
+              pushSimulationFeedMessage({
+                simulationId: parsed.simulationId,
+                sender: parsed.sender,
+                text: parsed.text,
+                timestampMs: parsed.timestampMs,
+              });
+              break;
+            }
             dispatch({
               type: "MESSAGE_RECEIVED",
               sender: parsed.sender,
@@ -106,23 +156,34 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
             });
             break;
           case "clients":
-            dispatch({ type: "CLIENTS_UPDATED", clients: parsed.names });
+            dispatchClientsIfChanged(parsed.names);
             break;
           case "clients_meta":
-            dispatch({
-              type: "CLIENT_PLATFORMS_UPDATED",
-              platforms: parsed.platforms,
-            });
+            dispatchPlatformsIfChanged(parsed.platforms);
             break;
           case "sync_history":
-            dispatch({ type: "HISTORY_SYNCED", messages: parsed.messages });
+            startTransition(() => {
+              dispatch({ type: "HISTORY_SYNCED", messages: parsed.messages });
+            });
+            break;
+          case "simulation_metrics":
+            pushSimulationMetrics(parsed.metrics);
+            break;
+          case "simulation_result":
+            pushSimulationResult(parsed.result);
             break;
         }
       }
     } catch (_) {
       /* */
     }
-  }, [dispatch, stopClientListPolling, stopPacketPolling]);
+  }, [
+    dispatch,
+    dispatchClientsIfChanged,
+    dispatchPlatformsIfChanged,
+    stopClientListPolling,
+    stopPacketPolling,
+  ]);
 
   const startPacketPolling = useCallback(() => {
     stopPacketPolling();
@@ -147,6 +208,8 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
 
     return () => {
       connectedRef.current = false;
+      lastClientsKeyRef.current = "";
+      lastPlatformsKeyRef.current = "";
       stopClientListPolling();
       stopPacketPolling();
       window.removeEventListener("focus", refreshVisibleClientList);
@@ -164,26 +227,29 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
     async (host: string, port: number, name: string) => {
       try {
         dispatch({ type: "CONNECT", host, port: String(port), name });
+        resetSimulationState();
         const result = await invoke<ConnectResult>("connect", {
           host,
           port,
           name,
         });
         connectedRef.current = true;
+        lastClientsKeyRef.current = "";
+        lastPlatformsKeyRef.current = "";
         dispatch({ type: "CONNECTED", name: result.name });
-        dispatch({ type: "CLIENTS_UPDATED", clients: result.clients });
-        dispatch({
-          type: "CLIENT_PLATFORMS_UPDATED",
-          platforms: result.clientPlatforms,
-        });
+        dispatchClientsIfChanged(result.clients);
+        dispatchPlatformsIfChanged(result.clientPlatforms);
         startPacketPolling();
         startClientListPolling();
         void requestClientList();
         void drainServerPackets();
       } catch (e) {
         connectedRef.current = false;
+        lastClientsKeyRef.current = "";
+        lastPlatformsKeyRef.current = "";
         stopClientListPolling();
         stopPacketPolling();
+        resetSimulationState();
         dispatch({
           type: "SET_ERROR",
           error: typeof e === "string" ? e : String(e),
@@ -192,6 +258,8 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
     },
     [
       dispatch,
+      dispatchClientsIfChanged,
+      dispatchPlatformsIfChanged,
       drainServerPackets,
       requestClientList,
       startClientListPolling,
@@ -240,8 +308,11 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
 
   const disconnect = useCallback(async () => {
     connectedRef.current = false;
+    lastClientsKeyRef.current = "";
+    lastPlatformsKeyRef.current = "";
     stopClientListPolling();
     stopPacketPolling();
+    resetSimulationState();
     try {
       await invoke("send_command", { raw: "QUIT|" });
     } catch (_) {

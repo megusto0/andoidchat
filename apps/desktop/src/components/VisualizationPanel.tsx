@@ -1,19 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useSimulation, type BotStatus } from "../hooks/useSimulation";
+import { useEffect, useMemo, useState } from "react";
+import { useSimulation } from "../hooks/useSimulation";
+import type {
+  SimBotStatus as BotStatus,
+  SimulationFeedMessage,
+  SimulationMode,
+} from "../types";
 import s from "./VisualizationPanel.module.css";
 
 interface Props {
   onClose: () => void;
-}
-
-type EventKind = "SYS" | "JOIN" | "MSG" | "LEAVE" | "ERR";
-
-interface EventEntry {
-  id: string;
-  kind: EventKind;
-  bot?: string;
-  text: string;
-  seconds: number;
+  sendCommand: (raw: string) => Promise<void> | void;
 }
 
 const TRAFFIC_HISTORY_SIZE = 40;
@@ -24,15 +20,29 @@ const SPARK_PADDING = 4;
 const PHASE_LABELS: Record<string, string> = {
   idle: "Ожидание",
   connecting: "Подключение",
-  messaging: "Нагрузка",
+  messaging: "Работа",
   disconnecting: "Отключение",
   done: "Завершено",
+  cancelled: "Остановлено",
+};
+
+const MODE_LABELS: Record<SimulationMode, string> = {
+  visible: "Visible",
+  benchmark: "Benchmark",
 };
 
 function formatSession(seconds: number) {
   const m = Math.floor(seconds / 60);
   const sec = Math.floor(seconds % 60);
   return `${m}м ${sec}с`;
+}
+
+function formatStamp(timestampMs: number) {
+  return new Date(timestampMs).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function buildSparkline(values: number[]) {
@@ -64,33 +74,6 @@ function buildSparkline(values: number[]) {
   )} L${first.x.toFixed(2)},${(SPARK_HEIGHT - SPARK_PADDING).toFixed(2)} Z`;
 
   return { line, area, last };
-}
-
-function buildBotMessage(botName: string, sentCount: number) {
-  const sequence = Math.max(0, sentCount - 1);
-  switch (sequence % 5) {
-    case 0:
-      return `Обычное сообщение ${sequence + 1} от ${botName}`;
-    case 1:
-      return `Проверка <@> Anna шалаш madam radar test #${sequence + 1}`;
-    case 2:
-      return `Нагрузка от ${botName} — сообщение ${sequence + 1}`;
-    case 3:
-      return `Тест <@> Anna test ${sequence + 1}`;
-    default:
-      return `Стабильный поток от ${botName} #${sequence + 1}`;
-  }
-}
-
-function pushEvents(
-  current: EventEntry[],
-  additions: EventEntry[],
-  limit = 28
-) {
-  if (additions.length === 0) {
-    return current;
-  }
-  return [...additions.reverse(), ...current].slice(0, limit);
 }
 
 function statusColor(status: BotStatus["status"]) {
@@ -203,17 +186,28 @@ function TopologyView({
   );
 }
 
-export function VisualizationPanel({ onClose }: Props) {
-  const { metrics, running, start, stop, isDone } = useSimulation();
-  const [host, setHost] = useState("127.0.0.1");
-  const [port, setPort] = useState("5000");
+function FeedRow({ item }: { item: SimulationFeedMessage }) {
+  const tagClass =
+    item.sender === "Server" ? `${s.logTag} ${s.logTagServer}` : `${s.logTag} ${s.logTagBot}`;
+  const tagLabel = item.sender === "Server" ? "SERVER" : "BOT";
+
+  return (
+    <div className={s.logItem} key={item.id}>
+      <span className={s.logTime}>{formatStamp(item.timestampMs)}</span>
+      <span className={tagClass}>{tagLabel}</span>
+      <span className={s.logBot}>{item.sender}</span>
+      <span className={s.logText}>{item.text}</span>
+    </div>
+  );
+}
+
+export function VisualizationPanel({ onClose, sendCommand }: Props) {
+  const { metrics, result, feed, running, mode, setMode, start, stop, isDone, passed } =
+    useSimulation(sendCommand);
   const [count, setCount] = useState("55");
   const [trafficHistory, setTrafficHistory] = useState<number[]>(
     Array.from({ length: TRAFFIC_HISTORY_SIZE }, () => 0)
   );
-  const [events, setEvents] = useState<EventEntry[]>([]);
-  const previousPhaseRef = useRef<string>("idle");
-  const previousBotsRef = useRef<Map<string, BotStatus>>(new Map());
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -227,128 +221,56 @@ export function VisualizationPanel({ onClose }: Props) {
   }, [onClose]);
 
   function handleStart() {
-    start(host, Number(port), Number(count));
-    setEvents([]);
+    void start(Math.max(1, Number(count) || 55));
   }
 
-  const phase = metrics.phase || "idle";
-  const requestedBots = Math.max(0, Number(count) || 0);
-  const connectedAll = requestedBots === 0 || metrics.totalConnected >= requestedBots;
-  const hasVerificationErrors = metrics.incorrectResponses > 0;
-  const hasConnectionErrors = metrics.failedConnections > 0;
+  const displayMetrics = result ?? metrics;
+  const phase = displayMetrics.phase || "idle";
+  const effectiveMode = running ? metrics.mode : result?.mode ?? mode;
+  const requestedBots = Math.max(
+    0,
+    displayMetrics.requestedClients || Number(count) || 0
+  );
+  const connectedAll =
+    requestedBots === 0 || displayMetrics.totalConnected >= requestedBots;
+  const hasVerificationErrors = displayMetrics.incorrectResponses > 0;
+  const hasConnectionErrors = displayMetrics.failedConnections > 0;
   const passedResult =
     isDone &&
+    passed &&
     connectedAll &&
     !hasConnectionErrors &&
     !hasVerificationErrors;
 
-  const deliveryPercent =
-    metrics.messagesSent > 0
-      ? (metrics.echoConfirmed / metrics.messagesSent) * 100
-      : 100;
-
-  const lossPercent =
-    metrics.messagesSent > 0
-      ? (metrics.incorrectResponses / metrics.messagesSent) * 100
-      : 0;
-
   const resultText = passedResult
-    ? `ПРОЙДЕН — подключено ${metrics.totalConnected}/${requestedBots || metrics.totalConnected}, ошибок проверки нет`
+    ? `ПРОЙДЕН — ${MODE_LABELS[displayMetrics.mode]} · подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}, ошибок проверки нет`
     : [
-        `НЕ ПРОЙДЕН — подключено ${metrics.totalConnected}/${requestedBots || metrics.totalConnected}`,
+        `НЕ ПРОЙДЕН — ${MODE_LABELS[displayMetrics.mode]} · подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}`,
         hasConnectionErrors
-          ? `ошибок подключения: ${metrics.failedConnections}`
+          ? `ошибок подключения: ${displayMetrics.failedConnections}`
           : null,
         hasVerificationErrors
-          ? `ошибок проверки ответа: ${metrics.incorrectResponses}`
+          ? `ошибок проверки: ${displayMetrics.incorrectResponses}`
           : null,
-        !connectedAll
-          ? `не все боты успели подключиться`
-          : null,
+        !connectedAll ? "не все боты успели подключиться" : null,
       ]
         .filter(Boolean)
         .join(", ");
 
   useEffect(() => {
     const sample =
-      running || metrics.elapsedSeconds > 0
-        ? Number(metrics.messagesPerSecond.toFixed(2))
+      running || displayMetrics.elapsedSeconds > 0
+        ? Number(displayMetrics.messagesPerSecond.toFixed(2))
         : 0;
 
     setTrafficHistory((prev) => [...prev.slice(-(TRAFFIC_HISTORY_SIZE - 1)), sample]);
-  }, [metrics.messagesPerSecond, metrics.elapsedSeconds, running]);
+  }, [displayMetrics.elapsedSeconds, displayMetrics.messagesPerSecond, running]);
 
   useEffect(() => {
     if (!running && phase === "idle") {
       setTrafficHistory(Array.from({ length: TRAFFIC_HISTORY_SIZE }, () => 0));
-      previousBotsRef.current = new Map();
-      previousPhaseRef.current = "idle";
     }
   }, [phase, running]);
-
-  useEffect(() => {
-    const additions: EventEntry[] = [];
-    const previousPhase = previousPhaseRef.current;
-    if (phase !== previousPhase) {
-      const label = PHASE_LABELS[phase] || phase;
-      additions.push({
-        id: `phase-${phase}-${metrics.elapsedSeconds}`,
-        kind: "SYS",
-        text: `Стадия симуляции: ${label}`,
-        seconds: metrics.elapsedSeconds,
-      });
-      previousPhaseRef.current = phase;
-    }
-
-    const previousBots = previousBotsRef.current;
-    const nextBots = new Map<string, BotStatus>();
-
-    for (const bot of metrics.botStatuses) {
-      const previous = previousBots.get(bot.name);
-      nextBots.set(bot.name, bot);
-
-      if (previous && previous.status !== bot.status) {
-        if (bot.status === "active") {
-          additions.push({
-            id: `join-${bot.name}-${metrics.elapsedSeconds}`,
-            kind: "JOIN",
-            bot: bot.name,
-            text: "присоединился к нагрузке",
-            seconds: metrics.elapsedSeconds,
-          });
-        } else if (bot.status === "done") {
-          additions.push({
-            id: `leave-${bot.name}-${metrics.elapsedSeconds}`,
-            kind: "LEAVE",
-            bot: bot.name,
-            text: "отключился",
-            seconds: metrics.elapsedSeconds,
-          });
-        } else if (bot.status === "error") {
-          additions.push({
-            id: `error-${bot.name}-${metrics.elapsedSeconds}`,
-            kind: "ERR",
-            bot: bot.name,
-            text: "ошибка соединения или доставки",
-            seconds: metrics.elapsedSeconds,
-          });
-        }
-      }
-
-      if (bot.messagesSent > (previous?.messagesSent ?? 0)) {
-        additions.push({
-          id: `msg-${bot.name}-${bot.messagesSent}-${metrics.elapsedSeconds}`,
-          kind: "MSG",
-          bot: bot.name,
-          text: buildBotMessage(bot.name, bot.messagesSent),
-          seconds: metrics.elapsedSeconds,
-        });
-      }
-    }
-
-    previousBotsRef.current = nextBots;
-    setEvents((current) => pushEvents(current, additions));
-  }, [metrics.botStatuses, metrics.elapsedSeconds, phase]);
 
   const { line, area, last } = useMemo(
     () => buildSparkline(trafficHistory),
@@ -357,16 +279,70 @@ export function VisualizationPanel({ onClose }: Props) {
 
   const trafficNow = trafficHistory[trafficHistory.length - 1] ?? 0;
   const trafficPeak = Math.max(...trafficHistory, 0);
+  const visibleFeed = useMemo(() => feed.slice(0, 14), [feed]);
+  const previewMessages = useMemo(() => feed.slice(0, 8), [feed]);
+  const topologyBots = displayMetrics.botStatuses;
+  const activeBots =
+    topologyBots.length > 0
+      ? topologyBots.filter((bot) => bot.status === "active").length
+      : displayMetrics.activeClients;
 
-  const previewMessages = useMemo(
-    () =>
-      events
-        .filter((event) => event.kind === "MSG" && event.bot)
-        .slice(0, 8),
-    [events]
-  );
-
-  const activeBots = metrics.botStatuses.filter((bot) => bot.status === "active").length;
+  const metricCards = [
+    {
+      label: "активных",
+      value: displayMetrics.activeClients,
+      className: `${s.metricCard} ${s.metricCardGood}`,
+      big: true,
+    },
+    {
+      label: "pkt/s",
+      value: displayMetrics.messagesPerSecond.toFixed(0),
+      className: `${s.metricCard} ${s.metricCardAccent}`,
+      big: true,
+    },
+    {
+      label: "доставлено ботам",
+      value: displayMetrics.messagesReceived,
+      className: s.metricCard,
+      big: false,
+    },
+    {
+      label: "доставлено watcher-у",
+      value: displayMetrics.watcherDeliveries,
+      className:
+        effectiveMode === "visible"
+          ? `${s.metricCard} ${s.metricCardAccent}`
+          : s.metricCard,
+      big: false,
+    },
+    {
+      label: "p50",
+      value: `${displayMetrics.p50ResponseMs.toFixed(1)}мс`,
+      className: s.metricCard,
+      big: false,
+    },
+    {
+      label: "p95",
+      value: `${displayMetrics.p95ResponseMs.toFixed(1)}мс`,
+      className: s.metricCard,
+      big: false,
+    },
+    {
+      label: "ответов сервера",
+      value: displayMetrics.serverResponsesConfirmed,
+      className: s.metricCard,
+      big: false,
+    },
+    {
+      label: "ошибок проверки",
+      value: displayMetrics.incorrectResponses,
+      className:
+        displayMetrics.incorrectResponses > 0
+          ? `${s.metricCard} ${s.metricCardWarn}`
+          : `${s.metricCard} ${s.metricCardGood}`,
+      big: false,
+    },
+  ];
 
   return (
     <div className={s.overlay}>
@@ -380,7 +356,14 @@ export function VisualizationPanel({ onClose }: Props) {
             </span>
           </div>
           <button className={s.closeBtn} onClick={onClose} aria-label="Закрыть">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="m18 6-12 12M6 6l12 12" />
             </svg>
           </button>
@@ -393,39 +376,21 @@ export function VisualizationPanel({ onClose }: Props) {
               <div className={s.controlActions}>
                 <button
                   className={`${s.primaryAction} ${running ? s.primaryActionRunning : ""}`}
-                  onClick={running ? stop : handleStart}
+                  onClick={running ? () => void stop() : handleStart}
                 >
                   <span className={running ? s.primaryDot : s.primaryPlay} />
                   {running ? "Запущено" : "Запустить"}
                 </button>
                 <button
                   className={s.secondaryAction}
-                  onClick={stop}
+                  onClick={() => void stop()}
                   disabled={!running}
                 >
                   Стоп
                 </button>
               </div>
 
-              <div className={s.miniInputGrid}>
-                <label className={s.miniInput}>
-                  <span className={s.miniInputLabel}>HOST</span>
-                  <input
-                    className={s.miniInputValue}
-                    value={host}
-                    onChange={(e) => setHost(e.target.value)}
-                    disabled={running}
-                  />
-                </label>
-                <label className={s.miniInput}>
-                  <span className={s.miniInputLabel}>PORT</span>
-                  <input
-                    className={s.miniInputValue}
-                    value={port}
-                    onChange={(e) => setPort(e.target.value)}
-                    disabled={running}
-                  />
-                </label>
+              <div className={`${s.miniInputGrid} ${s.miniInputGridSingle}`}>
                 <label className={s.miniInput}>
                   <span className={s.miniInputLabel}>БОТОВ</span>
                   <input
@@ -438,30 +403,52 @@ export function VisualizationPanel({ onClose }: Props) {
               </div>
             </div>
 
-            <div className={s.sectionLabel}>Профиль нагрузки</div>
+            <div className={s.sectionLabel}>Режим симуляции</div>
             <div className={s.profileStack}>
-              <div className={`${s.profileCard} ${s.profileCardActive}`}>
+              <button
+                type="button"
+                className={`${s.profileCard} ${effectiveMode === "visible" ? s.profileCardActive : ""}`}
+                onClick={() => setMode("visible")}
+                disabled={running}
+              >
                 <div className={s.profileHead}>
-                  <span className={s.profileRadio} />
-                  <span className={s.profileName}>Стресс-тест</span>
+                  <span
+                    className={
+                      effectiveMode === "visible" ? s.profileRadio : s.profileRadioMuted
+                    }
+                  />
+                  <span className={s.profileName}>Visible</span>
                 </div>
                 <div className={s.profileDesc}>
-                  Массовый broadcast с проверкой отклика и server-response.
+                  Боты шлют реальные MESSAGE всем подключённым наблюдателям. Desktop/CLI видят метрики, Android видит сам поток.
                 </div>
-              </div>
-              <div className={s.profileCard}>
+              </button>
+              <button
+                type="button"
+                className={`${s.profileCard} ${effectiveMode === "benchmark" ? s.profileCardActive : ""}`}
+                onClick={() => setMode("benchmark")}
+                disabled={running}
+              >
                 <div className={s.profileHead}>
-                  <span className={s.profileRadioMuted} />
-                  <span className={s.profileName}>Группа</span>
+                  <span
+                    className={
+                      effectiveMode === "benchmark" ? s.profileRadio : s.profileRadioMuted
+                    }
+                  />
+                  <span className={s.profileName}>Benchmark</span>
                 </div>
                 <div className={s.profileDesc}>
-                  Подготовлено для следующего шага: custom-target сценарии.
+                  Только серверные метрики без watcher-потока. Чистый ceiling маршрутизации.
                 </div>
-              </div>
+              </button>
             </div>
 
-            <div className={s.sectionLabel}>Поток</div>
+            <div className={s.sectionLabel}>Срез</div>
             <div className={s.kpiStack}>
+              <div className={s.kpiRow}>
+                <span className={s.kpiLabel}>Режим</span>
+                <span className={s.kpiValue}>{MODE_LABELS[effectiveMode]}</span>
+              </div>
               <div className={s.kpiRow}>
                 <span className={s.kpiLabel}>Фаза</span>
                 <span className={s.kpiValue}>{PHASE_LABELS[phase] || phase}</span>
@@ -469,16 +456,20 @@ export function VisualizationPanel({ onClose }: Props) {
               <div className={s.kpiRow}>
                 <span className={s.kpiLabel}>Подключено</span>
                 <span className={s.kpiValue}>
-                  {metrics.totalConnected}/{requestedBots || metrics.totalConnected}
+                  {displayMetrics.totalConnected}/{requestedBots || displayMetrics.totalConnected}
                 </span>
               </div>
               <div className={s.kpiRow}>
-                <span className={s.kpiLabel}>Сообщений/сек</span>
-                <span className={s.kpiValue}>{metrics.messagesPerSecond.toFixed(1)}</span>
+                <span className={s.kpiLabel}>Watcher delivery</span>
+                <span className={s.kpiValue}>{displayMetrics.watcherDeliveries}</span>
               </div>
               <div className={s.kpiRow}>
-                <span className={s.kpiLabel}>Средний RTT</span>
-                <span className={s.kpiValue}>{metrics.avgResponseMs.toFixed(1)}мс</span>
+                <span className={s.kpiLabel}>Сообщений/сек</span>
+                <span className={s.kpiValue}>{displayMetrics.messagesPerSecond.toFixed(1)}</span>
+              </div>
+              <div className={s.kpiRow}>
+                <span className={s.kpiLabel}>P95 RTT</span>
+                <span className={s.kpiValue}>{displayMetrics.p95ResponseMs.toFixed(1)}мс</span>
               </div>
             </div>
 
@@ -486,11 +477,9 @@ export function VisualizationPanel({ onClose }: Props) {
               <span className={`${s.streamDot} ${running ? s.streamDotActive : ""}`} />
               <div className={s.streamMeta}>
                 <div className={s.streamTitle}>
-                  {running ? "Отправка сообщений" : "Готово к запуску"}
+                  {running ? MODE_LABELS[displayMetrics.mode] : "Готово к запуску"}
                 </div>
-                <div className={s.streamSub}>
-                  {trafficNow.toFixed(1)} pkt/s
-                </div>
+                <div className={s.streamSub}>{trafficNow.toFixed(1)} pkt/s</div>
               </div>
               <button type="button" className={s.exitPanelBtn} onClick={onClose}>
                 Вернуться
@@ -504,7 +493,7 @@ export function VisualizationPanel({ onClose }: Props) {
                 <div>
                   <div className={s.sectionLabel}>Топология сети</div>
                   <div className={s.subtleLine}>
-                    {activeBots} / {metrics.botStatuses.length || requestedBots} активных
+                    {activeBots} / {topologyBots.length || requestedBots} активных
                   </div>
                 </div>
                 <div className={s.legend}>
@@ -523,41 +512,44 @@ export function VisualizationPanel({ onClose }: Props) {
                 </div>
               </div>
               <div className={s.topologyStage}>
-                <TopologyView
-                  bots={metrics.botStatuses}
-                  elapsedSeconds={metrics.elapsedSeconds}
-                />
+                {topologyBots.length === 0 ? (
+                  <div className={s.topologyEmpty}>
+                    {effectiveMode === "benchmark"
+                      ? "Benchmark не mirror-ит watcher-поток и не стримит bot status."
+                      : "Статусы ботов появятся после подключения visible-сессии."}
+                  </div>
+                ) : (
+                  <TopologyView
+                    bots={topologyBots}
+                    elapsedSeconds={displayMetrics.elapsedSeconds}
+                  />
+                )}
               </div>
             </section>
 
             <section className={s.logCard}>
               <div className={s.logHeader}>
-                <div className={s.sectionLabel}>Журнал событий</div>
+                <div className={s.sectionLabel}>Visible feed</div>
                 <div className={s.logChips}>
-                  <span className={`${s.logChip} ${s.logChipActive}`}>Все</span>
-                  <span className={s.logChip}>Подключения</span>
-                  <span className={s.logChip}>Сообщения</span>
-                  <span className={s.logHint}>⏬ авто-скролл</span>
+                  <span className={`${s.logChip} ${s.logChipActive}`}>
+                    {MODE_LABELS[effectiveMode]}
+                  </span>
+                  <span className={s.logHint}>
+                    {effectiveMode === "visible" ? "real MESSAGE feed" : "metrics only"}
+                  </span>
                 </div>
               </div>
               <div className={s.logList}>
-                {events.length === 0 ? (
+                {effectiveMode !== "visible" ? (
                   <div className={s.logEmpty}>
-                    События появятся после запуска симуляции.
+                    Benchmark не шлёт watcher-сообщения. Здесь остаётся только финальная метрика.
+                  </div>
+                ) : visibleFeed.length === 0 ? (
+                  <div className={s.logEmpty}>
+                    После старта сюда начнут приходить реальные MESSAGE пакеты от visible-ботов.
                   </div>
                 ) : (
-                  events.map((event) => (
-                    <div className={s.logItem} key={event.id}>
-                      <span className={s.logTime}>
-                        -{Math.max(0, Math.floor(event.seconds))}с
-                      </span>
-                      <span className={`${s.logTag} ${s[`logTag${event.kind}`]}`}>
-                        {event.kind}
-                      </span>
-                      <span className={s.logBot}>{event.bot ?? "system"}</span>
-                      <span className={s.logText}>{event.text}</span>
-                    </div>
-                  ))
+                  visibleFeed.map((item) => <FeedRow key={item.id} item={item} />)
                 )}
               </div>
             </section>
@@ -566,30 +558,12 @@ export function VisualizationPanel({ onClose }: Props) {
           <aside className={s.rightRail}>
             <div className={s.sectionLabel}>Метрики · live</div>
             <div className={s.metricsGrid}>
-              <div className={`${s.metricCard} ${s.metricCardGood}`}>
-                <div className={s.metricBig}>{metrics.activeClients}</div>
-                <div className={s.metricLabel}>активных</div>
-              </div>
-              <div className={`${s.metricCard} ${s.metricCardAccent}`}>
-                <div className={s.metricBig}>{metrics.messagesPerSecond.toFixed(0)}</div>
-                <div className={s.metricLabel}>pkt/s</div>
-              </div>
-              <div className={s.metricCard}>
-                <div className={s.metricValue}>{deliveryPercent.toFixed(1)}%</div>
-                <div className={s.metricLabel}>доставка</div>
-              </div>
-              <div className={s.metricCard}>
-                <div className={s.metricValue}>{metrics.p50ResponseMs.toFixed(1)}мс</div>
-                <div className={s.metricLabel}>p50</div>
-              </div>
-              <div className={s.metricCard}>
-                <div className={s.metricValue}>{metrics.p95ResponseMs.toFixed(1)}мс</div>
-                <div className={s.metricLabel}>p95</div>
-              </div>
-              <div className={`${s.metricCard} ${lossPercent > 0 ? s.metricCardWarn : ""}`}>
-                <div className={s.metricValue}>{lossPercent.toFixed(1)}%</div>
-                <div className={s.metricLabel}>потери</div>
-              </div>
+              {metricCards.map((item) => (
+                <div className={item.className} key={item.label}>
+                  <div className={item.big ? s.metricBig : s.metricValue}>{item.value}</div>
+                  <div className={s.metricLabel}>{item.label}</div>
+                </div>
+              ))}
             </div>
 
             <div className={s.throughputCard}>
@@ -626,25 +600,31 @@ export function VisualizationPanel({ onClose }: Props) {
 
             <div className={s.previewCard}>
               <div className={s.previewHeader}>
-                <span className={s.sectionLabel}>Чат · General</span>
-                <span className={s.liveTag}>LIVE</span>
+                <span className={s.sectionLabel}>Последние сообщения</span>
+                <span className={s.liveTag}>
+                  {effectiveMode === "visible" ? "LIVE" : "OFF"}
+                </span>
               </div>
               <div className={s.previewList}>
-                {previewMessages.length === 0 ? (
+                {effectiveMode !== "visible" ? (
                   <div className={s.previewEmpty}>
-                    Здесь появятся последние сообщения ботов.
+                    В Benchmark watcher-поток отключён.
+                  </div>
+                ) : previewMessages.length === 0 ? (
+                  <div className={s.previewEmpty}>
+                    Первые mirrored сообщения появятся здесь после старта.
                   </div>
                 ) : (
                   previewMessages.map((entry) => (
                     <div className={s.previewItem} key={`preview-${entry.id}`}>
                       <div className={s.previewAvatar}>
-                        {entry.bot?.slice(-2).toUpperCase()}
+                        {entry.sender.slice(0, 2).toUpperCase()}
                       </div>
                       <div className={s.previewBody}>
                         <div className={s.previewMeta}>
-                          <span className={s.previewBot}>{entry.bot}</span>
+                          <span className={s.previewBot}>{entry.sender}</span>
                           <span className={s.previewTime}>
-                            -{Math.max(0, Math.floor(entry.seconds))}с
+                            {formatStamp(entry.timestampMs)}
                           </span>
                         </div>
                         <div className={s.previewBubble}>{entry.text}</div>
@@ -664,8 +644,8 @@ export function VisualizationPanel({ onClose }: Props) {
             <div className={s.footerBadge}>
               <span className={`${s.footerDot} ${running ? s.footerDotActive : ""}`} />
               <span>
-                {metrics.elapsedSeconds > 0
-                  ? `Сессия ${formatSession(metrics.elapsedSeconds)}`
+                {displayMetrics.elapsedSeconds > 0
+                  ? `Сессия ${formatSession(displayMetrics.elapsedSeconds)}`
                   : "Ожидание запуска"}
               </span>
             </div>

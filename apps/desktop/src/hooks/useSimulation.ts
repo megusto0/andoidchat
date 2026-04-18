@@ -1,118 +1,80 @@
-/**
- * Хук для управления симуляцией нагрузочного тестирования.
- *
- * Подписывается на событие simulation-metrics и предоставляет
- * методы для запуска/остановки симуляции.
- */
-import { useEffect, useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import type { SimulationFeedMessage, SimulationMode } from "../types";
+import {
+  getSimulationSnapshot,
+  resetSimulationState,
+  subscribeSimulation,
+} from "../utils/simulationBus";
 
-export interface BotStatus {
-  name: string;
-  status: string;
-  messagesSent: number;
+interface UseSimulationResult {
+  metrics: ReturnType<typeof getSimulationSnapshot>["metrics"];
+  result: ReturnType<typeof getSimulationSnapshot>["result"];
+  feed: SimulationFeedMessage[];
+  running: boolean;
+  mode: SimulationMode;
+  setMode: Dispatch<SetStateAction<SimulationMode>>;
+  start: (count: number) => Promise<void>;
+  stop: () => Promise<void>;
+  isDone: boolean;
+  passed: boolean;
 }
 
-export interface SimMetrics {
-  activeClients: number;
-  totalConnected: number;
-  failedConnections: number;
-  messagesSent: number;
-  messagesReceived: number;
-  echoConfirmed: number;
-  serverResponsesConfirmed: number;
-  incorrectResponses: number;
-  avgResponseMs: number;
-  p50ResponseMs: number;
-  p95ResponseMs: number;
-  messagesPerSecond: number;
-  elapsedSeconds: number;
-  phase: string;
-  botStatuses: BotStatus[];
-}
-
-const INITIAL_METRICS: SimMetrics = {
-  activeClients: 0,
-  totalConnected: 0,
-  failedConnections: 0,
-  messagesSent: 0,
-  messagesReceived: 0,
-  echoConfirmed: 0,
-  serverResponsesConfirmed: 0,
-  incorrectResponses: 0,
-  avgResponseMs: 0,
-  p50ResponseMs: 0,
-  p95ResponseMs: 0,
-  messagesPerSecond: 0,
-  elapsedSeconds: 0,
-  phase: "idle",
-  botStatuses: [],
-};
-
-export function useSimulation() {
-  const [metrics, setMetrics] = useState<SimMetrics>(INITIAL_METRICS);
-  const [running, setRunning] = useState(false);
+export function useSimulation(
+  sendCommand: (raw: string) => Promise<void> | void
+): UseSimulationResult {
+  const [snapshot, setSnapshot] = useState(() => getSimulationSnapshot());
+  const [mode, setMode] = useState<SimulationMode>(
+    getSimulationSnapshot().metrics.mode
+  );
 
   useEffect(() => {
-    let mounted = true;
-
-    async function pullLatestMetrics() {
-      try {
-        const snapshot = await invoke<SimMetrics>("get_simulation_metrics");
-        if (!mounted) {
-          return;
-        }
-        setMetrics(snapshot);
-        setRunning(snapshot.phase !== "done" && snapshot.phase !== "idle");
-      } catch (_) {
-        /* ignore polling errors while backend boots */
-      }
-    }
-
-    const unlisten = listen<SimMetrics>("simulation-metrics", (event) => {
-      setMetrics(event.payload);
-      setRunning(event.payload.phase !== "done" && event.payload.phase !== "idle");
+    setSnapshot(getSimulationSnapshot());
+    return subscribeSimulation(() => {
+      setSnapshot(getSimulationSnapshot());
     });
-
-    pullLatestMetrics();
-    const interval = window.setInterval(pullLatestMetrics, 300);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(interval);
-      unlisten.then((fn) => fn());
-    };
   }, []);
 
+  useEffect(() => {
+    if (snapshot.running) {
+      setMode(snapshot.metrics.mode);
+    }
+  }, [snapshot.metrics.mode, snapshot.running]);
+
   const start = useCallback(
-    async (host: string, port: number, count: number) => {
-      setRunning(true);
-      setMetrics({ ...INITIAL_METRICS, phase: "connecting" });
-      try {
-        await invoke("start_simulation", { host, port, count });
-      } catch (e) {
-        setRunning(false);
-        setMetrics((m) => ({ ...m, phase: "done" }));
-      }
+    async (count: number) => {
+      resetSimulationState({
+        mode,
+        requestedClients: count,
+      });
+
+      await sendCommand(
+        `SIMULATE|${JSON.stringify({
+          mode,
+          count,
+        })}`
+      );
     },
-    []
+    [mode, sendCommand]
   );
 
   const stop = useCallback(async () => {
-    try {
-      await invoke("stop_simulation");
-    } catch (_) {
-      /* */
-    }
-    setRunning(false);
-  }, []);
+    await sendCommand("SIMULATE|stop");
+  }, [sendCommand]);
 
-  const isDone = metrics.phase === "done";
-  const passed =
-    isDone &&
-    metrics.totalConnected >= 50 &&
-    metrics.incorrectResponses === 0;
+  const phase = snapshot.result?.phase ?? snapshot.metrics.phase;
+  const isDone = phase === "done" || phase === "cancelled";
+  const passed = snapshot.result?.passed ?? snapshot.metrics.passed;
 
-  return { metrics, running, start, stop, isDone, passed };
+  return {
+    metrics: snapshot.metrics,
+    result: snapshot.result,
+    feed: snapshot.feed,
+    running: snapshot.running,
+    mode,
+    setMode,
+    start,
+    stop,
+    isDone,
+    passed,
+  };
 }

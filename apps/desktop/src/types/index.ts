@@ -18,6 +18,44 @@ export interface HistoryMessage {
   timestampMs: number;
 }
 
+export type SimulationMode = "visible" | "benchmark";
+
+export interface SimBotStatus {
+  name: string;
+  status: string;
+  messagesSent: number;
+}
+
+export interface SimMetrics {
+  requestedClients: number;
+  mode: SimulationMode;
+  activeClients: number;
+  totalConnected: number;
+  failedConnections: number;
+  messagesSent: number;
+  messagesReceived: number;
+  watcherDeliveries: number;
+  echoConfirmed: number;
+  serverResponsesConfirmed: number;
+  incorrectResponses: number;
+  avgResponseMs: number;
+  p50ResponseMs: number;
+  p95ResponseMs: number;
+  messagesPerSecond: number;
+  elapsedSeconds: number;
+  phase: string;
+  botStatuses: SimBotStatus[];
+  passed: boolean;
+}
+
+export interface SimulationFeedMessage {
+  id: string;
+  simulationId: string;
+  sender: string;
+  text: string;
+  timestampMs: number;
+}
+
 /** Контекст чата. */
 export type ChatContextKind = "general" | "self" | "group";
 
@@ -105,8 +143,18 @@ export type ParsedPacket =
   | { kind: "login_ok"; name: string }
   | { kind: "info"; text: string }
   | { kind: "error"; text: string }
-  | { kind: "message"; sender: string; text: string; mode: GroupMode; targets: string[]; timestampMs: number }
+  | {
+      kind: "message";
+      sender: string;
+      text: string;
+      mode: GroupMode;
+      targets: string[];
+      timestampMs: number;
+      simulationId?: string | null;
+      simulationMode?: SimulationMode | null;
+    }
   | { kind: "sync_history"; messages: HistoryMessage[] }
   | { kind: "clients"; names: string[] }
   | { kind: "clients_meta"; platforms: Record<string, ClientPlatform> }
-;
+  | { kind: "simulation_metrics"; metrics: SimMetrics }
+  | { kind: "simulation_result"; result: SimMetrics };

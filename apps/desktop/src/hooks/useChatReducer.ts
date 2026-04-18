@@ -54,10 +54,31 @@ function sortNames(names: Iterable<string>): string[] {
   return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, "ru"));
 }
 
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) {
     if (!b.has(value)) return false;
+  }
+  return true;
+}
+
+function platformMapsEqual(
+  a: Record<string, ChatState["clientPlatforms"][string]>,
+  b: Record<string, ChatState["clientPlatforms"][string]>
+): boolean {
+  const aEntries = Object.entries(a);
+  const bEntries = Object.entries(b);
+  if (aEntries.length !== bEntries.length) return false;
+  for (const [name, platform] of aEntries) {
+    if (b[name] !== platform) return false;
   }
   return true;
 }
@@ -230,18 +251,36 @@ function appendMessageToChat(
   };
 }
 
+function messageDedupKey(message: Message): string {
+  return `${message.sender}|${message.timestamp.getTime()}|${message.text}`;
+}
+
 function mergeMessages(existing: Message[], additions: Message[]): Message[] {
   if (additions.length === 0) return existing;
   if (existing.length === 0) return additions;
 
-  if (
-    existing[existing.length - 1]!.timestamp.getTime() <=
-    additions[0]!.timestamp.getTime()
-  ) {
-    return [...existing, ...additions];
+  const seen = new Set(existing.map(messageDedupKey));
+  const deduped = additions.filter((message) => {
+    const key = messageDedupKey(message);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  if (deduped.length === 0) {
+    return existing;
   }
 
-  return [...existing, ...additions].sort(
+  if (
+    existing[existing.length - 1]!.timestamp.getTime() <=
+    deduped[0]!.timestamp.getTime()
+  ) {
+    return [...existing, ...deduped];
+  }
+
+  return [...existing, ...deduped].sort(
     (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
   );
 }
@@ -558,14 +597,27 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         );
       }
 
+      const nextPlatforms = {
+        ...nextState.clientPlatforms,
+        ...(nextState.userName
+          ? { [nextState.userName]: "desktop" as const }
+          : {}),
+      };
+
+      if (
+        joined.length === 0 &&
+        left.length === 0 &&
+        arraysEqual(state.clients, nextClients) &&
+        setsEqual(state.onlineClients, nextOnlineClients) &&
+        setsEqual(state.selectedClients, selectedClients) &&
+        platformMapsEqual(state.clientPlatforms, nextPlatforms)
+      ) {
+        return state;
+      }
+
       return {
         ...nextState,
-        clientPlatforms: {
-          ...nextState.clientPlatforms,
-          ...(nextState.userName
-            ? { [nextState.userName]: "desktop" as const }
-            : {}),
-        },
+        clientPlatforms: nextPlatforms,
         selectedClients,
       };
     }
@@ -584,6 +636,10 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
 
       if (state.userName && !nextPlatforms[state.userName]) {
         nextPlatforms[state.userName] = "desktop";
+      }
+
+      if (platformMapsEqual(state.clientPlatforms, nextPlatforms)) {
+        return state;
       }
 
       return {

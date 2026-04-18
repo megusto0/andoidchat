@@ -16,17 +16,31 @@ import sys
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+import time
 
 MARKER = "<@>"
 
 MAX_MESSAGES_PER_SECOND = 20
-HISTORY_LIMIT_PER_CHAT = 200
 RATE_LIMIT_WINDOW = 1.0
+HISTORY_LIMIT_PER_CHAT = 200
 KNOWN_CLIENT_PLATFORMS = {"desktop", "android"}
 DISCOVERY_PORT = 54545
 DISCOVERY_REQUEST = "TCP_MESSENGER_DISCOVER_V1"
 DISCOVERY_APP = "tcp-messenger"
 GENERAL_CHAT_ID = "chat:general"
+SIMULATION_DEFAULT_CLIENTS = 55
+SIMULATION_BOT_PREFIX = "__sim_cli_bot__"
+SIM_BOT_CONNECT_STAGGER_MS = 20
+SIMULATION_WINDOW_SECS = 12
+SIM_POST_CONNECT_SETTLE_MS = 450
+SIM_MESSAGE_INTERVAL_BASE_MS = 650
+SIM_MESSAGE_INTERVAL_STEP_MS = 45
+SIM_SHUTDOWN_DRAIN_TIMEOUT_MS = 1400
+SIM_SHUTDOWN_DRAIN_POLL_MS = 70
+SIM_METRICS_INTERVAL_MS = 250
+SIMULATION_LOCAL_HOST = "127.0.0.1"
+PALINDROME_WORDS = ("Anna", "шалаш", "madam", "radar")
+NON_PALINDROME = "test"
 
 
 def log(*args):
@@ -118,6 +132,97 @@ def build_response_text(message):
 
     lines.append("Результат обработки после <@>: " + transform_text(text_after))
     return "\n".join(lines)
+
+
+def build_simulation_message(name, sequence):
+    """
+    Формирует сообщение бота симуляции по шаблону, близкому к desktop-симулятору.
+    """
+    variant = sequence % 5
+    if variant == 0:
+        return f"Обычное сообщение {sequence + 1} от {name}"
+    if variant == 1:
+        return (
+            f"Проверка <@> {PALINDROME_WORDS[0]} {PALINDROME_WORDS[1]} "
+            f"{PALINDROME_WORDS[2]} {PALINDROME_WORDS[3]} {NON_PALINDROME} #{sequence + 1}"
+        )
+    if variant == 2:
+        return f"Нагрузка от {name} — сообщение {sequence + 1}"
+    if variant == 3:
+        return f"Тест <@> {PALINDROME_WORDS[0]} {NON_PALINDROME} {sequence + 1}"
+    return f"Стабильный поток от {name} #{sequence + 1}"
+
+
+def parse_simulation_payload(payload):
+    """
+    Разбирает команду симуляции.
+
+    Поддерживает:
+    - SIMULATE|
+    - SIMULATE|55
+    - SIMULATE|visible 55
+    - SIMULATE|benchmark 55
+    - legacy aliases: observe/load
+    - SIMULATE|{"mode":"visible","count":55}
+    - SIMULATE|stop
+    """
+    raw = payload.strip()
+
+    if raw == "":
+        return True, "start", "visible", SIMULATION_DEFAULT_CLIENTS
+
+    if raw.lower() == "stop":
+        return True, "stop", "visible", 0
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parts = raw.split()
+        if len(parts) == 1:
+            parsed = {"mode": "visible", "count": parts[0]}
+        elif len(parts) == 2:
+            parsed = {"mode": parts[0], "count": parts[1]}
+        else:
+            parsed = raw
+
+    if isinstance(parsed, dict):
+        if str(parsed.get("action", "")).lower() == "stop":
+            return True, "stop", "visible", 0
+        mode = str(parsed.get("mode", "visible")).strip().lower() or "visible"
+        count = parsed.get("count", SIMULATION_DEFAULT_CLIENTS)
+    else:
+        mode = "visible"
+        count = parsed
+
+    if mode == "observe":
+        mode = "visible"
+    elif mode == "load":
+        mode = "benchmark"
+
+    if mode not in {"visible", "benchmark"}:
+        return False, "Укажите режим visible или benchmark.", "visible", 0
+
+    try:
+        count = int(count)
+    except (TypeError, ValueError):
+        return False, "Укажите количество ботов положительным целым числом.", mode, 0
+
+    if count < 1:
+        return False, "Количество ботов должно быть больше нуля.", mode, 0
+
+    return True, "start", mode, count
+
+
+def percentile(values, ratio):
+    """
+    Возвращает percentile для отсортированного списка чисел.
+    """
+    if not values:
+        return 0.0
+
+    index = round((len(values) - 1) * ratio)
+    index = max(0, min(len(values) - 1, index))
+    return values[index]
 
 
 def parse_command(line):
@@ -292,6 +397,7 @@ class ClientInfo:
     group_mode: str = "all"
     group: set = field(default_factory=set)
     message_times: deque = field(default_factory=deque)
+    ephemeral: bool = False
 
 
 @dataclass
@@ -313,6 +419,79 @@ class StoredMessage:
         }
 
 
+@dataclass
+class SimBotStatus:
+    name: str
+    status: str = "connecting"
+    messages_sent: int = 0
+
+    def as_payload(self):
+        return {
+            "name": self.name,
+            "status": self.status,
+            "messagesSent": self.messages_sent,
+        }
+
+
+@dataclass
+class SimMetrics:
+    requested_clients: int
+    mode: str
+    bot_statuses: list[SimBotStatus] = field(default_factory=list)
+    active_clients: int = 0
+    total_connected: int = 0
+    failed_connections: int = 0
+    messages_sent: int = 0
+    messages_received: int = 0
+    watcher_deliveries: int = 0
+    echo_confirmed: int = 0
+    server_responses_confirmed: int = 0
+    incorrect_responses: int = 0
+    response_times_ms: list[float] = field(default_factory=list)
+
+    def as_payload(self, phase, elapsed_seconds):
+        sorted_times = sorted(self.response_times_ms)
+        avg_response_ms = (
+            sum(sorted_times) / len(sorted_times)
+            if sorted_times
+            else 0.0
+        )
+        delivered_packets = self.messages_received + self.watcher_deliveries
+        messages_per_second = (
+            delivered_packets / elapsed_seconds
+            if elapsed_seconds > 0
+            else 0.0
+        )
+        return {
+            "requestedClients": self.requested_clients,
+            "mode": self.mode,
+            "activeClients": self.active_clients,
+            "totalConnected": self.total_connected,
+            "failedConnections": self.failed_connections,
+            "messagesSent": self.messages_sent,
+            "messagesReceived": self.messages_received,
+            "watcherDeliveries": self.watcher_deliveries,
+            "echoConfirmed": self.echo_confirmed,
+            "serverResponsesConfirmed": self.server_responses_confirmed,
+            "incorrectResponses": self.incorrect_responses,
+            "avgResponseMs": round(avg_response_ms, 2),
+            "p50ResponseMs": round(percentile(sorted_times, 0.50), 2),
+            "p95ResponseMs": round(percentile(sorted_times, 0.95), 2),
+            "messagesPerSecond": round(messages_per_second, 2),
+            "elapsedSeconds": round(elapsed_seconds, 2),
+            "phase": phase,
+            "botStatuses": [
+                bot.as_payload() for bot in self.bot_statuses
+            ] if self.mode == "visible" else [],
+            "passed": (
+                phase == "done"
+                and self.total_connected >= self.requested_clients
+                and self.failed_connections == 0
+                and self.incorrect_responses == 0
+            ),
+        }
+
+
 class AsyncServer:
     """Асинхронный сервер мессенджера."""
 
@@ -325,6 +504,9 @@ class AsyncServer:
         self.server: asyncio.Server | None = None
         self._shutdown_event = asyncio.Event()
         self._discovery_transport = None
+        self._simulation_task: asyncio.Task | None = None
+        self._simulation_cancel: asyncio.Event | None = None
+        self._simulation_context: dict | None = None
 
     def _create_discovery_protocol(self):
         response = build_discovery_response(self.port)
@@ -348,6 +530,23 @@ class AsyncServer:
                 self.transport.sendto(response, addr)
 
         return DiscoveryProtocol()
+
+    def _visible_client_names(self):
+        return sorted(
+            name
+            for name, client in self.clients.items()
+            if not client.ephemeral
+        )
+
+    def _simulation_watchers(self, desktop_only: bool = False):
+        watchers = [
+            client
+            for client in self.clients.values()
+            if not client.ephemeral
+        ]
+        if desktop_only:
+            watchers = [client for client in watchers if client.platform == "desktop"]
+        return watchers
 
     async def _send_line(self, client: ClientInfo, text: str) -> bool:
         """
@@ -488,6 +687,162 @@ class AsyncServer:
         )
         await self._send_line(client, "SYNC_HISTORY|" + payload)
 
+    async def _send_simulation_result(self, client: ClientInfo, payload: dict):
+        """
+        Отправляет итоговые метрики симуляции клиенту-инициатору.
+        """
+        await self._send_line(
+            client,
+            "SIMULATION_RESULT|" + json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
+
+    async def _send_simulation_metrics(self, client: ClientInfo, payload: dict):
+        """
+        Отправляет live-снимок метрик симуляции клиенту-инициатору.
+        """
+        await self._send_line(
+            client,
+            "SIMULATION_METRICS|" + json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
+
+    async def _broadcast_info_to_watchers(
+        self,
+        text: str,
+        excluded_names: set | None = None,
+    ):
+        excluded = excluded_names or set()
+        watchers = [
+            client
+            for client in self._simulation_watchers(desktop_only=False)
+            if client.name not in excluded
+        ]
+        if not watchers:
+            return
+        await asyncio.gather(
+            *[self._send_info(client, text) for client in watchers],
+            return_exceptions=True,
+        )
+
+    async def _broadcast_simulation_metrics_to_watchers(self, payload: dict):
+        watchers = self._simulation_watchers(desktop_only=True)
+        if not watchers:
+            return
+        await asyncio.gather(
+            *[self._send_simulation_metrics(client, payload) for client in watchers],
+            return_exceptions=True,
+        )
+
+    async def _broadcast_simulation_result_to_watchers(self, payload: dict):
+        watchers = self._simulation_watchers(desktop_only=True)
+        if not watchers:
+            return
+        await asyncio.gather(
+            *[self._send_simulation_result(client, payload) for client in watchers],
+            return_exceptions=True,
+        )
+
+    async def _send_simulation_event(self, client: ClientInfo, payload: dict):
+        """
+        Отправляет одно наблюдаемое событие симуляции клиенту-инициатору.
+        """
+        await self._send_line(
+            client,
+            "SIMULATION_EVENT|" + json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
+
+    async def _emit_simulation_event(self, requester_name: str, mode: str, payload: dict):
+        """
+        Legacy helper; kept for compatibility if simulation events return later.
+        """
+        if mode != "visible":
+            return
+        requester = self.clients.get(requester_name)
+        if requester is None:
+            return
+        await self._send_simulation_event(requester, payload)
+
+    async def _mirror_simulation_message(
+        self,
+        sender_name: str,
+        text: str,
+        timestamp: int,
+    ) -> bool:
+        context = self._simulation_context
+        if context is None or context.get("mode") != "visible":
+            return False
+
+        simulation_id = context.get("simulation_id")
+        metrics = context.get("metrics")
+        if not isinstance(simulation_id, str):
+            return False
+
+        watchers = self._simulation_watchers(desktop_only=False)
+        if not watchers:
+            return False
+
+        packet = json.dumps(
+            {
+                "sender": sender_name,
+                "content": text,
+                "mode": "all",
+                "targets": [],
+                "timestamp": timestamp,
+                "simulationId": simulation_id,
+                "simulationMode": "visible",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        results = await asyncio.gather(
+            *[self._send_line(watcher, "MESSAGE|" + packet) for watcher in watchers],
+            return_exceptions=True,
+        )
+        delivered_count = sum(1 for result in results if result is True)
+        if delivered_count > 0 and isinstance(metrics, SimMetrics):
+            metrics.watcher_deliveries += delivered_count
+        return delivered_count > 0
+
+    def _simulation_phase(self, metrics: SimMetrics) -> str:
+        active = sum(1 for bot in metrics.bot_statuses if bot.status == "active")
+        connecting = sum(1 for bot in metrics.bot_statuses if bot.status == "connecting")
+        errored = sum(1 for bot in metrics.bot_statuses if bot.status == "error")
+        done = sum(1 for bot in metrics.bot_statuses if bot.status == "done")
+
+        if active > 0:
+            return "messaging"
+        if connecting > 0 and done == 0 and errored == 0:
+            return "connecting"
+        if done + errored == len(metrics.bot_statuses):
+            return "done"
+        return "disconnecting"
+
+    def _update_sim_bot(
+        self,
+        metrics: SimMetrics,
+        bot_idx: int,
+        status: str | None = None,
+        messages_sent: int | None = None,
+    ):
+        if bot_idx < 0 or bot_idx >= len(metrics.bot_statuses):
+            return
+        bot = metrics.bot_statuses[bot_idx]
+        if status is not None:
+            bot.status = status
+        if messages_sent is not None:
+            bot.messages_sent = messages_sent
+
     def _check_rate_limit(self, client: ClientInfo) -> bool:
         """
         Проверяет ограничение частоты сообщений (rate limiter).
@@ -512,7 +867,7 @@ class AsyncServer:
         Рассылает обновлённый список клиентов всем подключённым.
         """
         excluded = excluded_names or set()
-        names = sorted(self.clients.keys())
+        names = self._visible_client_names()
         packet = "CLIENTS|" + ",".join(names)
         meta_packet = "CLIENTS_META|" + json.dumps(
             {name: self.clients[name].platform for name in names},
@@ -522,7 +877,7 @@ class AsyncServer:
 
         recipients = [
             c for c in self.clients.values()
-            if c.name not in excluded
+            if c.name not in excluded and not c.ephemeral
         ]
 
         async def _send_one(c: ClientInfo):
@@ -581,6 +936,336 @@ class AsyncServer:
         client.group_mode = "custom"
         client.group = set(selected)
 
+    def _cleanup_simulation_users(self, bot_names):
+        """
+        Удаляет временных пользователей симуляции из known_users/history.
+        """
+        chat_ids = set()
+        for bot_name in bot_names:
+            self.known_users.discard(bot_name)
+            chat_ids.update(self.user_chats.pop(bot_name, set()))
+
+        for chat_id in chat_ids:
+            self.chat_history.pop(chat_id, None)
+
+    async def _run_simulation_reader(
+        self,
+        reader,
+        bot_name,
+        pending_echoes,
+        pending_server,
+        metrics,
+        cancel_event,
+    ):
+        while not cancel_event.is_set():
+            try:
+                line = await reader.readline()
+            except OSError:
+                break
+
+            if not line:
+                break
+
+            trimmed = line.decode("utf-8").strip()
+            if trimmed == "":
+                continue
+
+            command, payload = parse_command(trimmed)
+            if command != "MESSAGE":
+                continue
+
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+
+            if not isinstance(parsed, dict):
+                continue
+
+            sender = parsed.get("sender")
+            text = parsed.get("content")
+            if not isinstance(sender, str) or not isinstance(text, str):
+                continue
+
+            metrics.messages_received += 1
+
+            if sender == bot_name:
+                if pending_echoes:
+                    expected_text, sent_at = pending_echoes.popleft()
+                    if expected_text == text:
+                        metrics.echo_confirmed += 1
+                        metrics.response_times_ms.append(
+                            (time.monotonic() - sent_at) * 1000.0
+                        )
+                    else:
+                        metrics.incorrect_responses += 1
+                continue
+
+            if sender == "Server":
+                for index, (expected_text, sent_at) in enumerate(pending_server):
+                    if build_response_text(expected_text) == text:
+                        metrics.server_responses_confirmed += 1
+                        metrics.response_times_ms.append(
+                            (time.monotonic() - sent_at) * 1000.0
+                        )
+                        del pending_server[index]
+                        break
+                # Бот в custom-группе получает server-response не только на свои
+                # сообщения, но и на сообщения остальных участников. Такие
+                # пакеты не должны считаться ошибкой проверки.
+                continue
+
+    async def _run_simulation_bot(
+        self,
+        bot_idx,
+        bot_name,
+        target_names,
+        metrics,
+        start_event,
+        cancel_event,
+        active_until,
+    ):
+        connected = False
+        writer = None
+        read_task = None
+        pending_echoes = deque()
+        pending_server = deque()
+
+        try:
+            reader, writer = await asyncio.open_connection(
+                SIMULATION_LOCAL_HOST,
+                self.port,
+            )
+
+            login_payload = json.dumps(
+                {
+                    "name": bot_name,
+                    "platform": "desktop",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            writer.write((f"LOGIN|{login_payload}\n").encode("utf-8"))
+            await writer.drain()
+
+            first_line = await reader.readline()
+            if not first_line:
+                metrics.failed_connections += 1
+                return
+
+            command, _ = parse_command(first_line.decode("utf-8").rstrip("\n"))
+            if command != "LOGIN_OK":
+                metrics.failed_connections += 1
+                self._update_sim_bot(metrics, bot_idx, status="error")
+                return
+
+            connected = True
+            metrics.total_connected += 1
+            metrics.active_clients += 1
+            self._update_sim_bot(metrics, bot_idx, status="active", messages_sent=0)
+
+            read_task = asyncio.create_task(
+                self._run_simulation_reader(
+                    reader,
+                    bot_name,
+                    pending_echoes,
+                    pending_server,
+                    metrics,
+                    cancel_event,
+                )
+            )
+
+            await start_event.wait()
+
+            sequence = 0
+            while not cancel_event.is_set() and time.monotonic() < active_until:
+                text = build_simulation_message(bot_name, sequence)
+                packet = json.dumps(
+                    {
+                        "mode": "custom",
+                        "targets": target_names,
+                        "content": text,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                writer.write((f"MESSAGE|{packet}\n").encode("utf-8"))
+                await writer.drain()
+
+                sent_at = time.monotonic()
+                pending_echoes.append((text, sent_at))
+                if MARKER in text:
+                    pending_server.append((text, sent_at))
+
+                metrics.messages_sent += 1
+                sequence += 1
+                self._update_sim_bot(metrics, bot_idx, messages_sent=sequence)
+
+                interval_ms = (
+                    SIM_MESSAGE_INTERVAL_BASE_MS
+                    + (bot_idx % 7) * SIM_MESSAGE_INTERVAL_STEP_MS
+                )
+                await asyncio.sleep(interval_ms / 1000.0)
+
+            deadline = time.monotonic() + (SIM_SHUTDOWN_DRAIN_TIMEOUT_MS / 1000.0)
+            while (
+                (pending_echoes or pending_server)
+                and not cancel_event.is_set()
+                and time.monotonic() < deadline
+            ):
+                await asyncio.sleep(SIM_SHUTDOWN_DRAIN_POLL_MS / 1000.0)
+
+            if pending_echoes or pending_server:
+                metrics.incorrect_responses += len(pending_echoes) + len(pending_server)
+
+            writer.write(b"QUIT|\n")
+            await writer.drain()
+        except OSError:
+            if not connected:
+                metrics.failed_connections += 1
+                self._update_sim_bot(metrics, bot_idx, status="error")
+            elif pending_echoes or pending_server:
+                metrics.incorrect_responses += len(pending_echoes) + len(pending_server)
+        finally:
+            if connected:
+                metrics.active_clients = max(0, metrics.active_clients - 1)
+                final_status = "error" if pending_echoes or pending_server else "done"
+                self._update_sim_bot(metrics, bot_idx, status=final_status)
+            if read_task is not None:
+                read_task.cancel()
+                await asyncio.gather(read_task, return_exceptions=True)
+            if writer is not None:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except OSError:
+                    pass
+
+    async def _run_cli_simulation(self, requester_name, mode, count, cancel_event):
+        started_at = time.monotonic()
+        simulation_id = f"sim:{int(started_at * 1000)}"
+        metrics = SimMetrics(
+            requested_clients=count,
+            mode=mode,
+            bot_statuses=[
+                SimBotStatus(
+                    name=f"{SIMULATION_BOT_PREFIX}{int(started_at * 1000)}_{index:03d}"
+                )
+                for index in range(1, count + 1)
+            ],
+        )
+        bot_names = [bot.name for bot in metrics.bot_statuses]
+        start_event = asyncio.Event()
+        active_until = started_at + SIMULATION_WINDOW_SECS
+        tasks = []
+        metrics_task = None
+
+        try:
+            self._simulation_context = {
+                "simulation_id": simulation_id,
+                "mode": mode,
+                "requester_name": requester_name,
+                "metrics": metrics,
+            }
+            initial_payload = metrics.as_payload("connecting", 0.0)
+            await self._broadcast_simulation_metrics_to_watchers(initial_payload)
+
+            async def publish_metrics_loop():
+                while not cancel_event.is_set():
+                    await self._broadcast_simulation_metrics_to_watchers(
+                        metrics.as_payload(
+                            self._simulation_phase(metrics),
+                            time.monotonic() - started_at,
+                        ),
+                    )
+                    await asyncio.sleep(SIM_METRICS_INTERVAL_MS / 1000.0)
+
+            metrics_task = asyncio.create_task(publish_metrics_loop())
+
+            for index, bot_name in enumerate(bot_names):
+                targets = [name for name in bot_names if name != bot_name]
+                tasks.append(
+                    asyncio.create_task(
+                        self._run_simulation_bot(
+                            index,
+                            bot_name,
+                            targets,
+                            metrics,
+                            start_event,
+                            cancel_event,
+                            active_until,
+                        )
+                    )
+                )
+                await asyncio.sleep(SIM_BOT_CONNECT_STAGGER_MS / 1000.0)
+
+            await asyncio.sleep(SIM_POST_CONNECT_SETTLE_MS / 1000.0)
+            start_event.set()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+            phase = "cancelled" if cancel_event.is_set() else "done"
+            payload = metrics.as_payload(phase, time.monotonic() - started_at)
+            requester = self.clients.get(requester_name)
+            if requester is not None:
+                await self._send_info(
+                    requester,
+                    f"Симуляция {mode} завершена. Итоговые метрики отправлены отдельным пакетом.",
+                )
+            await self._broadcast_simulation_metrics_to_watchers(payload)
+            await self._broadcast_simulation_result_to_watchers(payload)
+            await self._broadcast_info_to_watchers(
+                (
+                    f"Симуляция {mode}, запущенная {requester_name}, завершена: "
+                    f"{'успешно' if payload.get('passed') else 'с ошибками'}."
+                ),
+                excluded_names={requester_name},
+            )
+        finally:
+            start_event.set()
+            if metrics_task is not None:
+                metrics_task.cancel()
+                await asyncio.gather(metrics_task, return_exceptions=True)
+            self._cleanup_simulation_users(bot_names)
+            if self._simulation_context is not None and self._simulation_context.get("simulation_id") == simulation_id:
+                self._simulation_context = None
+            current_task = asyncio.current_task()
+            if self._simulation_task is current_task:
+                self._simulation_task = None
+                self._simulation_cancel = None
+
+    async def _handle_simulation_command(self, client, payload):
+        is_valid, action, mode, count = parse_simulation_payload(payload)
+
+        if not is_valid:
+            await self._send_error(client, action)
+            return
+
+        current_task = self._simulation_task
+        if action == "stop":
+            if current_task is None or current_task.done() or self._simulation_cancel is None:
+                await self._send_error(client, "Симуляция сейчас не запущена.")
+                return
+            self._simulation_cancel.set()
+            await self._send_info(client, "Симуляция останавливается…")
+            return
+
+        if current_task is not None and not current_task.done():
+            await self._send_error(client, "Симуляция уже выполняется. Дождитесь завершения или отправьте /simulate stop.")
+            return
+
+        self._simulation_cancel = asyncio.Event()
+        self._simulation_task = asyncio.create_task(
+            self._run_cli_simulation(client.name, mode, count, self._simulation_cancel)
+        )
+        await self._send_info(
+            client,
+            f"Симуляция {mode} запущена: {count} ботов, окно {SIMULATION_WINDOW_SECS} сек.",
+        )
+        await self._broadcast_info_to_watchers(
+            f"Симуляция {mode} запущена пользователем {client.name}: {count} ботов.",
+            excluded_names={client.name},
+        )
+
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """
         Обслуживает одно клиентское подключение от начала до конца.
@@ -630,14 +1315,17 @@ class AsyncServer:
                 writer=writer,
                 address=address,
                 platform=client_platform,
+                ephemeral=registered_name.startswith(SIMULATION_BOT_PREFIX),
             )
             self.clients[registered_name] = client
             self._remember_user(registered_name, client_platform)
 
             await self._send_line(client, "LOGIN_OK|" + registered_name)
             await self._send_sync_history(client)
-            await self._broadcast_client_list()
-            log("Подключился клиент:", registered_name, f"[{client_platform}]", address)
+            if not client.ephemeral:
+                await self._broadcast_client_list()
+            if not client.ephemeral:
+                log("Подключился клиент:", registered_name, f"[{client_platform}]", address)
 
             while True:
                 line_bytes = await reader.readline()
@@ -665,16 +1353,17 @@ class AsyncServer:
                         await self._send_error(client, "Пустое сообщение не отправлено.")
                         continue
 
-                    if mode == "all":
-                        log("Сообщение от", registered_name + ":", message_text, "-> ALL")
-                    else:
-                        log(
-                            "Сообщение от",
-                            registered_name + ":",
-                            message_text,
-                            "->",
-                            ",".join(targets) if targets else "(self)",
-                        )
+                    if not client.ephemeral:
+                        if mode == "all":
+                            log("Сообщение от", registered_name + ":", message_text, "-> ALL")
+                        else:
+                            log(
+                                "Сообщение от",
+                                registered_name + ":",
+                                message_text,
+                                "->",
+                                ",".join(targets) if targets else "(self)",
+                            )
 
                     stored_message = self._store_message(
                         registered_name,
@@ -683,6 +1372,12 @@ class AsyncServer:
                         targets,
                     )
                     await self._deliver_message(stored_message)
+                    if client.ephemeral:
+                        await self._mirror_simulation_message(
+                            stored_message.sender,
+                            stored_message.content,
+                            stored_message.timestamp,
+                        )
 
                     if MARKER in message_text:
                         response_text = build_response_text(message_text)
@@ -694,10 +1389,16 @@ class AsyncServer:
                             registered_name,
                         )
                         await self._deliver_message(server_stored)
+                        if client.ephemeral:
+                            await self._mirror_simulation_message(
+                                server_stored.sender,
+                                server_stored.content,
+                                server_stored.timestamp,
+                            )
                 elif command == "GROUP":
                     await self._update_group(client, payload)
                 elif command == "LIST":
-                    names = sorted(self.clients.keys())
+                    names = self._visible_client_names()
                     await self._send_line(client, "CLIENTS|" + ",".join(names))
                     await self._send_line(
                         client,
@@ -707,6 +1408,8 @@ class AsyncServer:
                             separators=(",", ":"),
                         ),
                     )
+                elif command == "SIMULATE":
+                    await self._handle_simulation_command(client, payload)
                 elif command == "QUIT":
                     break
                 else:
@@ -718,13 +1421,15 @@ class AsyncServer:
             if registered_name:
                 removed = self.clients.pop(registered_name, None)
                 if removed:
-                    log("Клиент отключился:", removed.name)
+                    if not removed.ephemeral:
+                        log("Клиент отключился:", removed.name)
                     try:
                         removed.writer.close()
                         await removed.writer.wait_closed()
                     except OSError:
                         pass
-                    await self._broadcast_client_list()
+                    if not removed.ephemeral:
+                        await self._broadcast_client_list()
             else:
                 try:
                     writer.close()
@@ -764,6 +1469,7 @@ class AsyncServer:
         if self._discovery_transport is not None:
             log("UDP discovery:", DISCOVERY_PORT)
         log("Сервер поддерживает несколько клиентов одновременно.")
+        log("CLI-симуляция: команда /simulate <count> из client.py")
         log("Для остановки сервера нажмите Ctrl+C.")
         log()
 
@@ -776,6 +1482,12 @@ class AsyncServer:
 
         log()
         log("Сервер останавливается…")
+
+        if self._simulation_cancel is not None:
+            self._simulation_cancel.set()
+        if self._simulation_task is not None:
+            self._simulation_task.cancel()
+            await asyncio.gather(self._simulation_task, return_exceptions=True)
 
         for client in list(self.clients.values()):
             try:

@@ -228,6 +228,10 @@
   gap: 8px;
 }
 
+.miniInputGridSingle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .miniInput {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -259,10 +263,18 @@
 }
 
 .profileCard {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
+}
+
+.profileCard:disabled {
+  cursor: default;
 }
 
 .profileCardActive {
@@ -466,6 +478,20 @@
   padding: 10px 16px 16px;
 }
 
+.topologyEmpty {
+  height: 100%;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.01), rgba(0, 0, 0, 0.04));
+}
+
 .topologySvg {
   width: 100%;
   height: 100%;
@@ -609,6 +635,16 @@
   background: var(--info-bg);
 }
 
+.logTagServer {
+  color: var(--info);
+  background: var(--info-bg);
+}
+
+.logTagBot {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
 .logTagJOIN {
   color: var(--success);
   background: var(--success-bg);
@@ -638,6 +674,8 @@
 .logText {
   flex: 1;
   min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .metricsGrid {
@@ -837,6 +875,8 @@
   font-size: 11.5px;
   line-height: 1.35;
   max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .resultBanner {

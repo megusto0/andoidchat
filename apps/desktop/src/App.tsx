@@ -9,7 +9,8 @@ import "./styles/global.css";
 
 export default function App() {
   const [state, dispatch] = useChatReducer();
-  const { connect, sendMessage, disconnect, discoverServer } = useTauri(dispatch);
+  const { connect, sendMessage, sendCommand, disconnect, discoverServer } =
+    useTauri(dispatch);
 
   const handleSendMessage = useCallback(
     (text: string, mode: GroupMode, targets: string[]) => {
@@ -56,6 +57,7 @@ export default function App() {
         setGroup={handleSetGroup}
         switchChat={handleSwitchChat}
         toggleVisualization={handleToggleVisualization}
+        sendCommand={sendCommand}
       />
     </div>
   );
