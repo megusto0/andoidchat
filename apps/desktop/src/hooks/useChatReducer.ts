@@ -206,13 +206,14 @@ function appendMessageToChat(
   const current = ensureChat(state.chats, descriptor);
   const activate = options?.activate ?? false;
   const shouldMarkUnread = options?.markUnread ?? false;
-  const timestampMs = message.timestamp.getTime();
+  const updatedMessages = mergeMessages(current.messages, [message]);
+  const timestampMs =
+    updatedMessages[updatedMessages.length - 1]?.timestamp.getTime() ??
+    message.timestamp.getTime();
 
   const updatedChat: ChatContext = {
     ...current,
-    messages: [...current.messages, message].sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
-    ),
+    messages: updatedMessages,
     hasUnread: activate ? false : current.hasUnread || shouldMarkUnread,
     lastActivityAt: Math.max(current.lastActivityAt, timestampMs),
   };
@@ -227,6 +228,22 @@ function appendMessageToChat(
     chatOrder: sortChatOrder(chats),
     activeChatId: activate ? descriptor.id : state.activeChatId,
   };
+}
+
+function mergeMessages(existing: Message[], additions: Message[]): Message[] {
+  if (additions.length === 0) return existing;
+  if (existing.length === 0) return additions;
+
+  if (
+    existing[existing.length - 1]!.timestamp.getTime() <=
+    additions[0]!.timestamp.getTime()
+  ) {
+    return [...existing, ...additions];
+  }
+
+  return [...existing, ...additions].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+  );
 }
 
 function upsertChat(
@@ -285,32 +302,70 @@ function getGroupModeForChat(chat: ChatContext): ChatState["groupMode"] {
 }
 
 function reduceHistory(state: ChatState, messages: HistoryMessage[]): ChatState {
-  let nextState = state;
+  if (messages.length === 0) {
+    return state;
+  }
+
+  const grouped = new Map<
+    string,
+    {
+      descriptor: ReturnType<typeof makeChatDescriptor>;
+      messages: Message[];
+    }
+  >();
 
   for (const historyMessage of [...messages].sort(
     (a, b) => a.timestampMs - b.timestampMs
   )) {
     const descriptor = getDescriptorFromIncoming(
-      nextState.userName,
+      state.userName,
       historyMessage.sender,
       historyMessage.mode,
       historyMessage.targets
     );
     const message = makeMessage(
-      historyMessage.sender === nextState.userName ? "own" : "other",
+      historyMessage.sender === state.userName ? "own" : "other",
       historyMessage.sender,
       historyMessage.text,
       historyMessage.timestampMs
     );
-    const chatUpdate = appendMessageToChat(nextState, descriptor, message);
-    nextState = {
-      ...nextState,
-      chats: chatUpdate.chats,
-      chatOrder: chatUpdate.chatOrder,
+
+    const existing = grouped.get(descriptor.id);
+    if (existing) {
+      existing.messages.push(message);
+    } else {
+      grouped.set(descriptor.id, {
+        descriptor,
+        messages: [message],
+      });
+    }
+  }
+
+  if (grouped.size === 0) {
+    return state;
+  }
+
+  const chats: Record<string, ChatContext> = { ...state.chats };
+
+  for (const { descriptor, messages: additions } of grouped.values()) {
+    const current = ensureChat(chats, descriptor);
+    const mergedMessages = mergeMessages(current.messages, additions);
+    chats[descriptor.id] = {
+      ...current,
+      messages: mergedMessages,
+      lastActivityAt: Math.max(
+        current.lastActivityAt,
+        mergedMessages[mergedMessages.length - 1]?.timestamp.getTime() ??
+          current.lastActivityAt
+      ),
     };
   }
 
-  return nextState;
+  return {
+    ...state,
+    chats,
+    chatOrder: sortChatOrder(chats),
+  };
 }
 
 function reducer(state: ChatState, action: ChatAction): ChatState {

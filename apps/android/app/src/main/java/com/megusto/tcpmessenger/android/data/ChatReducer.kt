@@ -111,39 +111,7 @@ object ChatReducer {
             }
 
             is ChatAction.HistorySynced -> {
-                var nextState = state
-
-                action.messages
-                    .sortedBy(HistoryMessage::timestampMillis)
-                    .forEach { message ->
-                        val descriptor = getDescriptorFromIncoming(
-                            currentUser = nextState.userName,
-                            sender = message.sender,
-                            mode = message.mode,
-                            targets = message.targets,
-                        )
-                        val update = appendMessageToChat(
-                            state = nextState,
-                            descriptor = descriptor,
-                            message = makeMessage(
-                                type = if (message.sender == nextState.userName) {
-                                    MessageType.OWN
-                                } else {
-                                    MessageType.OTHER
-                                },
-                                sender = message.sender,
-                                text = message.text,
-                                timestampMillis = message.timestampMillis,
-                            ),
-                            markUnread = false,
-                        )
-                        nextState = nextState.copy(
-                            chats = update.chats,
-                            chatOrder = update.chatOrder,
-                        )
-                    }
-
-                nextState
+                reduceHistory(state, action.messages)
             }
 
             is ChatAction.ClientsUpdated -> {
@@ -497,14 +465,18 @@ object ChatReducer {
         markUnread: Boolean = false,
     ): ChatUpdate {
         val current = ensureChat(state.chats, descriptor)
+        val updatedMessages = mergeMessages(current.messages, listOf(message))
         val updatedChat = current.copy(
-            messages = (current.messages + message).sortedBy(MessageItem::timestampMillis),
+            messages = updatedMessages,
             hasUnread = if (activate) {
                 false
             } else {
                 current.hasUnread || markUnread
             },
-            lastActivityAt = maxOf(current.lastActivityAt, message.timestampMillis),
+            lastActivityAt = maxOf(
+                current.lastActivityAt,
+                updatedMessages.lastOrNull()?.timestampMillis ?: message.timestampMillis,
+            ),
         )
 
         val chats = state.chats + (descriptor.id to updatedChat)
@@ -549,5 +521,73 @@ object ChatReducer {
         ChatContextKind.GENERAL -> GroupMode.ALL
         ChatContextKind.SELF -> GroupMode.NONE
         ChatContextKind.GROUP -> GroupMode.CUSTOM
+    }
+
+    private fun reduceHistory(
+        state: ChatState,
+        messages: List<HistoryMessage>,
+    ): ChatState {
+        if (messages.isEmpty()) return state
+
+        val grouped = linkedMapOf<String, Pair<ChatDescriptor, MutableList<MessageItem>>>()
+
+        messages
+            .sortedBy(HistoryMessage::timestampMillis)
+            .forEach { historyMessage ->
+                val descriptor = getDescriptorFromIncoming(
+                    currentUser = state.userName,
+                    sender = historyMessage.sender,
+                    mode = historyMessage.mode,
+                    targets = historyMessage.targets,
+                )
+                val bucket = grouped.getOrPut(descriptor.id) {
+                    descriptor to mutableListOf()
+                }.second
+                bucket += makeMessage(
+                    type = if (historyMessage.sender == state.userName) {
+                        MessageType.OWN
+                    } else {
+                        MessageType.OTHER
+                    },
+                    sender = historyMessage.sender,
+                    text = historyMessage.text,
+                    timestampMillis = historyMessage.timestampMillis,
+                )
+            }
+
+        if (grouped.isEmpty()) return state
+
+        val chats = state.chats.toMutableMap()
+        for ((_, pair) in grouped) {
+            val (descriptor, additions) = pair
+            val current = ensureChat(chats, descriptor)
+            val mergedMessages = mergeMessages(current.messages, additions)
+            chats[descriptor.id] = current.copy(
+                messages = mergedMessages,
+                lastActivityAt = maxOf(
+                    current.lastActivityAt,
+                    mergedMessages.lastOrNull()?.timestampMillis ?: current.lastActivityAt,
+                ),
+            )
+        }
+
+        return state.copy(
+            chats = chats,
+            chatOrder = sortChatOrder(chats),
+        )
+    }
+
+    private fun mergeMessages(
+        existing: List<MessageItem>,
+        additions: List<MessageItem>,
+    ): List<MessageItem> {
+        if (additions.isEmpty()) return existing
+        if (existing.isEmpty()) return additions
+
+        return if (existing.last().timestampMillis <= additions.first().timestampMillis) {
+            existing + additions
+        } else {
+            (existing + additions).sortedBy(MessageItem::timestampMillis)
+        }
     }
 }

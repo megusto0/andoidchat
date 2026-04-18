@@ -781,7 +781,7 @@ private fun MessageList(
 
     LaunchedEffect(chat?.id, messages.size) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+            listState.scrollToItem(messages.lastIndex)
         }
     }
 
