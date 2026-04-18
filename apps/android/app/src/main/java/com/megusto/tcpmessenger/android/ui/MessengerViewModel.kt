@@ -11,12 +11,14 @@ import com.megusto.tcpmessenger.android.data.DiscoveredServer
 import com.megusto.tcpmessenger.android.data.ServerEvent
 import com.megusto.tcpmessenger.android.data.ServerDiscovery
 import com.megusto.tcpmessenger.android.data.TcpMessengerClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.Collator
 import java.util.Locale
 
@@ -162,7 +164,7 @@ class MessengerViewModel : ViewModel() {
             .sortedWith(java.util.Comparator { left, right -> collator.compare(left, right) })
     }
 
-    private fun handleServerEvent(event: ServerEvent) {
+    private suspend fun handleServerEvent(event: ServerEvent) {
         when (event) {
             is ServerEvent.LoginOk -> dispatch(ChatAction.Connected(event.name))
             is ServerEvent.Info -> dispatch(ChatAction.InfoReceived(event.text))
@@ -176,7 +178,12 @@ class MessengerViewModel : ViewModel() {
                     timestampMillis = event.timestampMillis,
                 ),
             )
-            is ServerEvent.SyncHistory -> dispatch(ChatAction.HistorySynced(event.messages))
+            is ServerEvent.SyncHistory -> {
+                val action = ChatAction.HistorySynced(event.messages)
+                withContext(Dispatchers.Default) {
+                    _state.update { ChatReducer.reduce(it, action) }
+                }
+            }
 
             is ServerEvent.Clients -> dispatch(ChatAction.ClientsUpdated(event.names))
             is ServerEvent.ClientPlatforms -> dispatch(ChatAction.ClientPlatformsUpdated(event.platforms))

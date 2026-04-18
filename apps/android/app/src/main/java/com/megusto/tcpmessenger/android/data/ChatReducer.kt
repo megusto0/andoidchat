@@ -577,6 +577,9 @@ object ChatReducer {
         )
     }
 
+    private fun messageDedupKey(message: MessageItem): String =
+        message.sender + "|" + message.timestampMillis + "|" + message.text
+
     private fun mergeMessages(
         existing: List<MessageItem>,
         additions: List<MessageItem>,
@@ -584,10 +587,15 @@ object ChatReducer {
         if (additions.isEmpty()) return existing
         if (existing.isEmpty()) return additions
 
-        return if (existing.last().timestampMillis <= additions.first().timestampMillis) {
-            existing + additions
+        val seen = HashSet<String>(existing.size)
+        existing.forEach { seen += messageDedupKey(it) }
+        val deduped = additions.filter { seen.add(messageDedupKey(it)) }
+        if (deduped.isEmpty()) return existing
+
+        return if (existing.last().timestampMillis <= deduped.first().timestampMillis) {
+            existing + deduped
         } else {
-            (existing + additions).sortedBy(MessageItem::timestampMillis)
+            (existing + deduped).sortedBy(MessageItem::timestampMillis)
         }
     }
 }

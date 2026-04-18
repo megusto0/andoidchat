@@ -20,6 +20,7 @@ from datetime import datetime
 MARKER = "<@>"
 
 MAX_MESSAGES_PER_SECOND = 20
+HISTORY_LIMIT_PER_CHAT = 200
 RATE_LIMIT_WINDOW = 1.0
 KNOWN_CLIENT_PLATFORMS = {"desktop", "android"}
 DISCOVERY_PORT = 54545
@@ -432,7 +433,10 @@ class AsyncServer:
             targets=normalized_targets,
             timestamp=int(datetime.now().timestamp() * 1000),
         )
-        self.chat_history.setdefault(chat_id, []).append(stored)
+        history = self.chat_history.setdefault(chat_id, [])
+        history.append(stored)
+        if len(history) > HISTORY_LIMIT_PER_CHAT:
+            del history[:len(history) - HISTORY_LIMIT_PER_CHAT]
 
         for member in members:
             self._remember_user(member)
@@ -462,7 +466,10 @@ class AsyncServer:
             targets=server_targets,
             timestamp=int(datetime.now().timestamp() * 1000) + 1,
         )
-        self.chat_history.setdefault(original_chat_id, []).append(stored)
+        history = self.chat_history.setdefault(original_chat_id, [])
+        history.append(stored)
+        if len(history) > HISTORY_LIMIT_PER_CHAT:
+            del history[:len(history) - HISTORY_LIMIT_PER_CHAT]
         return stored
 
     async def _send_sync_history(self, client: ClientInfo):
