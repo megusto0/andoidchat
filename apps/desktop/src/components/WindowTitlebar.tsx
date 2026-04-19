@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import s from "./WindowTitlebar.module.css";
 
 interface Props {
   meta?: string;
 }
 
-function hasTauriWindowControls() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-function getAppWindow() {
-  return hasTauriWindowControls() ? getCurrentWindow() : null;
+async function readMaximizedState() {
+  return invoke<boolean>("window_is_maximized");
 }
 
 function MinimizeIcon() {
@@ -86,88 +82,73 @@ function CloseIcon() {
 export function WindowTitlebar({ meta }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
-  const controlsEnabled = hasTauriWindowControls();
+  const [controlsEnabled, setControlsEnabled] = useState(false);
 
   useEffect(() => {
-    const appWindow = getAppWindow();
-    if (!appWindow) return;
+    if (typeof window === "undefined") {
+      return;
+    }
 
     let active = true;
-    let unlistenResize: (() => void) | undefined;
-    let unlistenFocus: (() => void) | undefined;
 
     const syncMaximized = async () => {
       try {
-        const maximized = await appWindow.isMaximized();
-        if (active) setIsMaximized(maximized);
+        const maximized = await readMaximizedState();
+        if (!active) return;
+        setIsMaximized(maximized);
+        setControlsEnabled(true);
       } catch (_) {
-        /* window state is unavailable */
-      }
-    };
-
-    const syncFocused = async () => {
-      try {
-        const focused = await appWindow.isFocused();
-        if (active) setIsFocused(focused);
-      } catch (_) {
-        /* window state is unavailable */
+        if (active) setControlsEnabled(false);
       }
     };
 
     void syncMaximized();
-    void syncFocused();
 
-    void appWindow.onResized(() => {
+    const handleResize = () => {
       void syncMaximized();
-    }).then((unlisten) => {
-      if (active) unlistenResize = unlisten;
-      else unlisten();
-    });
+    };
+    const handleFocus = () => {
+      if (active) setIsFocused(true);
+    };
+    const handleBlur = () => {
+      if (active) setIsFocused(false);
+    };
 
-    void appWindow.onFocusChanged(({ payload }) => {
-      if (active) setIsFocused(payload);
-    }).then((unlisten) => {
-      if (active) unlistenFocus = unlisten;
-      else unlisten();
-    });
+    setIsFocused(document.hasFocus());
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
 
     return () => {
       active = false;
-      unlistenResize?.();
-      unlistenFocus?.();
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
     };
   }, []);
 
   async function handleMinimize() {
-    const appWindow = getAppWindow();
-    if (!appWindow) return;
-
     try {
-      await appWindow.minimize();
+      await invoke("window_minimize");
+      setControlsEnabled(true);
     } catch (_) {
       /* */
     }
   }
 
   async function handleToggleMaximize() {
-    const appWindow = getAppWindow();
-    if (!appWindow) return;
-
     try {
-      await appWindow.toggleMaximize();
-      const maximized = await appWindow.isMaximized();
+      const maximized = await invoke<boolean>("window_toggle_maximize");
       setIsMaximized(maximized);
+      setControlsEnabled(true);
     } catch (_) {
       /* */
     }
   }
 
   async function handleClose() {
-    const appWindow = getAppWindow();
-    if (!appWindow) return;
-
     try {
-      await appWindow.close();
+      await invoke("window_close");
     } catch (_) {
       /* */
     }

@@ -189,6 +189,46 @@ async fn get_simulation_metrics(
     Ok(state.get_simulation_metrics())
 }
 
+/// Сворачивает текущее окно приложения.
+#[tauri::command]
+fn window_minimize(window: tauri::Window) -> Result<(), String> {
+    window.minimize().map_err(|e| format!("Не удалось свернуть окно: {}", e))
+}
+
+/// Переключает состояние maximized для текущего окна и возвращает новое состояние.
+#[tauri::command]
+fn window_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
+    let is_maximized = window
+        .is_maximized()
+        .map_err(|e| format!("Не удалось прочитать состояние окна: {}", e))?;
+
+    if is_maximized {
+        window
+            .unmaximize()
+            .map_err(|e| format!("Не удалось восстановить окно: {}", e))?;
+        Ok(false)
+    } else {
+        window
+            .maximize()
+            .map_err(|e| format!("Не удалось развернуть окно: {}", e))?;
+        Ok(true)
+    }
+}
+
+/// Возвращает, развернуто ли текущее окно.
+#[tauri::command]
+fn window_is_maximized(window: tauri::Window) -> Result<bool, String> {
+    window
+        .is_maximized()
+        .map_err(|e| format!("Не удалось прочитать состояние окна: {}", e))
+}
+
+/// Закрывает текущее окно приложения.
+#[tauri::command]
+fn window_close(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| format!("Не удалось закрыть окно: {}", e))
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Arc::new(AppState::new()))
@@ -204,6 +244,10 @@ fn main() {
             start_simulation,
             stop_simulation,
             get_simulation_metrics,
+            window_minimize,
+            window_toggle_maximize,
+            window_is_maximized,
+            window_close,
         ])
         .run(tauri::generate_context!())
         .expect("Ошибка запуска Tauri");

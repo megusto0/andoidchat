@@ -124,6 +124,20 @@ import java.util.Date
 import java.util.Locale
 
 private val SimulationOutline = Color(0xFF63D6D0)
+private val SimulationBotSuffixPattern = Regex("(\\d{3})(?!.*\\d)")
+
+private fun formatSimulationSender(name: String, isSimulation: Boolean): String {
+    if (!isSimulation || name == "Server") {
+        return name
+    }
+
+    val suffix = SimulationBotSuffixPattern.find(name)?.groupValues?.getOrNull(1)
+    return if (suffix != null) {
+        "bot_$suffix"
+    } else {
+        name
+    }
+}
 
 @Composable
 fun ChatScreen(
@@ -966,7 +980,7 @@ private fun SimulationFeedHeader(
             latestMessage?.let { latest ->
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "${latest.sender}: ${latest.text}",
+                    text = "${formatSimulationSender(latest.sender, latest.simulationId != null)}: ${latest.text}",
                     style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
                     color = TextMuted,
                     maxLines = 1,
@@ -996,6 +1010,9 @@ private fun MessageBubble(
     val timeLabel = remember(message.timestampMillis) {
         timeFormatter.format(Date(message.timestampMillis))
     }
+    val displaySender = remember(message.sender, message.simulationId) {
+        formatSimulationSender(message.sender, message.simulationId != null)
+    }
 
     when (message.type) {
         MessageType.INFO -> SystemChipRow(
@@ -1020,7 +1037,7 @@ private fun MessageBubble(
         )
 
         MessageType.OTHER -> IncomingBubble(
-            sender = message.sender,
+            sender = displaySender,
             text = message.text,
             time = timeLabel,
             showSender = isFirstInGroup,
