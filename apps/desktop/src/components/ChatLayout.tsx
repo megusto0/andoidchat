@@ -80,41 +80,43 @@ export function ChatLayout({
   const canSendToCurrentTarget =
     state.groupMode !== "custom" || currentTargets.length > 0;
 
-  const onlineCount = state.onlineClients.size - (state.onlineClients.has(state.userName) ? 1 : 0);
-  const isConnected = state.connectionStatus === "connected";
-
   return (
-    <>
-      <Header
-        userName={state.userName}
-        host={state.host}
-        port={state.port}
-        status={state.connectionStatus}
-        showVisualization={state.showVisualization}
-        onToggleVisualization={toggleVisualization}
-        onDisconnect={disconnect}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-      />
-      <div className={s.layout}>
-        {sidebarOpen && (
-          <div
-            className={s.sidebarOverlay}
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-        {sidebarOpen && (
-          <Sidebar
-            userName={state.userName}
-            clients={state.clients}
-            onlineClients={state.onlineClients}
-            clientPlatforms={state.clientPlatforms}
-            groupMode={state.groupMode}
-            selectedClients={state.selectedClients}
-            onSetGroup={handleSetGroup}
-          />
-        )}
-        <div className={s.main}>
-          <div className={s.chatHeader}>
+    <div className={s.layout}>
+      {sidebarOpen && (
+        <div
+          className={s.sidebarOverlay}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {sidebarOpen && (
+        <Sidebar
+          userName={state.userName}
+          host={state.host}
+          port={state.port}
+          status={state.connectionStatus}
+          clients={state.clients}
+          onlineClients={state.onlineClients}
+          clientPlatforms={state.clientPlatforms}
+          groupMode={state.groupMode}
+          selectedClients={state.selectedClients}
+          onSetGroup={handleSetGroup}
+        />
+      )}
+      <div className={s.main}>
+        <div className={s.chatHeader}>
+          <div className={s.chatHeaderLead}>
+            <button
+              className={s.menuBtn}
+              onClick={() => setSidebarOpen((v) => !v)}
+              aria-label="Меню"
+              title="Боковая панель"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <line x1="3" y1="5" x2="15" y2="5" />
+                <line x1="3" y1="9" x2="15" y2="9" />
+                <line x1="3" y1="13" x2="15" y2="13" />
+              </svg>
+            </button>
             <div className={s.chatHeaderInfo}>
               <div className={s.chatHeaderTitle}>
                 <span className={s.chatHeaderName}>
@@ -126,50 +128,40 @@ export function ChatLayout({
                   </span>
                 )}
               </div>
-              <div className={s.chatHeaderMeta}>
-                <span
-                  className={`${s.chatHeaderDot} ${isConnected ? "" : s.chatHeaderDotOffline}`}
-                />
-                <span className={s.chatHeaderHost}>
-                  {isConnected && state.host && state.port
-                    ? `${state.host}:${state.port}`
-                    : "отключен"}
-                </span>
-                {isConnected && (
-                  <>
-                    <span className={s.chatHeaderSep}>·</span>
-                    <span className={s.chatHeaderPing}>
-                      {onlineCount} в сети
-                    </span>
-                    <span className={s.chatHeaderSep}>·</span>
-                    <span className={s.chatHeaderPing}>
-                      TCP
-                    </span>
-                  </>
-                )}
+              <div className={s.chatHeaderScope}>
+                {activeChat?.kind === "general" && "Общий поток сообщений"}
+                {activeChat?.kind === "self" && "Локальный контекст"}
+                {activeChat?.kind === "group" && "Маршрут выбранных адресатов"}
               </div>
             </div>
           </div>
-          <ChatArea messages={activeChat?.messages ?? []} ownName={state.userName} />
-          <InputBar
-            onSend={(text) => sendMessage(text, state.groupMode, currentTargets)}
-            disabled={state.connectionStatus !== "connected"}
-            canSend={canSendToCurrentTarget}
-            chats={visibleChats}
-            activeChat={activeChat}
-            activeChatId={activeChat?.id ?? null}
-            groupMode={state.groupMode}
-            selectedClients={state.selectedClients}
-            onSwitchChat={switchChatContext}
+          <Header
+            className={s.chatHeaderActions}
+            showVisualization={state.showVisualization}
+            onToggleVisualization={toggleVisualization}
+            onDisconnect={disconnect}
           />
         </div>
-        {state.showVisualization && (
-          <VisualizationPanel
-            onClose={toggleVisualization}
-            sendCommand={sendCommand}
-          />
-        )}
+        <ChatArea messages={activeChat?.messages ?? []} ownName={state.userName} />
+        <InputBar
+          onSend={(text) => sendMessage(text, state.groupMode, currentTargets)}
+          disabled={state.connectionStatus !== "connected"}
+          canSend={canSendToCurrentTarget}
+          chats={visibleChats}
+          activeChat={activeChat}
+          activeChatId={activeChat?.id ?? null}
+          groupMode={state.groupMode}
+          selectedClients={state.selectedClients}
+          onSwitchChat={switchChatContext}
+        />
       </div>
-    </>
+      {state.showVisualization && (
+        <VisualizationPanel
+          onClose={toggleVisualization}
+          sendCommand={sendCommand}
+          onDisconnect={disconnect}
+        />
+      )}
+    </div>
   );
 }

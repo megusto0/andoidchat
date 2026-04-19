@@ -1,6 +1,6 @@
 import type { SimMetrics, SimulationFeedMessage } from "../types";
 
-const MAX_SIMULATION_FEED = 40;
+const MAX_SIMULATION_FEED = 320;
 
 export const INITIAL_SIM_METRICS: SimMetrics = {
   requestedClients: 0,
@@ -28,6 +28,8 @@ export interface SimulationSnapshot {
   metrics: SimMetrics;
   result: SimMetrics | null;
   feed: SimulationFeedMessage[];
+  hiddenFeedCount: number;
+  anchorTimestampMs: number | null;
   running: boolean;
   simulationId: string | null;
 }
@@ -38,11 +40,15 @@ let snapshot: SimulationSnapshot = {
   metrics: INITIAL_SIM_METRICS,
   result: null,
   feed: [],
+  hiddenFeedCount: 0,
+  anchorTimestampMs: null,
   running: false,
   simulationId: null,
 };
 
 const listeners = new Set<Listener>();
+let pendingFeed: Omit<SimulationFeedMessage, "id">[] = [];
+let feedFlushHandle: number | null = null;
 
 function cloneMetrics(metrics: SimMetrics): SimMetrics {
   return {
@@ -57,6 +63,18 @@ function emit() {
   }
 }
 
+function cancelPendingFeedFlush() {
+  if (feedFlushHandle !== null) {
+    window.cancelAnimationFrame(feedFlushHandle);
+    feedFlushHandle = null;
+  }
+}
+
+function clearPendingFeed() {
+  pendingFeed = [];
+  cancelPendingFeedFlush();
+}
+
 function isRunningPhase(phase: string) {
   return phase !== "idle" && phase !== "done" && phase !== "cancelled";
 }
@@ -66,6 +84,8 @@ export function getSimulationSnapshot(): SimulationSnapshot {
     metrics: cloneMetrics(snapshot.metrics),
     result: snapshot.result ? cloneMetrics(snapshot.result) : null,
     feed: [...snapshot.feed],
+    hiddenFeedCount: snapshot.hiddenFeedCount,
+    anchorTimestampMs: snapshot.anchorTimestampMs,
     running: snapshot.running,
     simulationId: snapshot.simulationId,
   };
@@ -81,6 +101,7 @@ export function subscribeSimulation(listener: Listener) {
 export function resetSimulationState(
   preset?: Partial<Pick<SimMetrics, "mode" | "requestedClients">>
 ) {
+  clearPendingFeed();
   snapshot = {
     metrics: {
       ...INITIAL_SIM_METRICS,
@@ -88,6 +109,8 @@ export function resetSimulationState(
     },
     result: null,
     feed: [],
+    hiddenFeedCount: 0,
+    anchorTimestampMs: null,
     running: false,
     simulationId: null,
   };
@@ -104,10 +127,16 @@ export function pushSimulationMetrics(metrics: SimMetrics) {
       snapshot.metrics.mode !== metrics.mode ||
       snapshot.metrics.requestedClients !== metrics.requestedClients);
 
+  if (shouldResetFeed) {
+    clearPendingFeed();
+  }
+
   snapshot = {
     metrics: cloneMetrics(metrics),
     result: shouldResetFeed ? null : snapshot.result,
     feed: shouldResetFeed ? [] : snapshot.feed,
+    hiddenFeedCount: shouldResetFeed ? 0 : snapshot.hiddenFeedCount,
+    anchorTimestampMs: shouldResetFeed ? null : snapshot.anchorTimestampMs,
     running: isRunningPhase(metrics.phase),
     simulationId: shouldResetFeed ? null : snapshot.simulationId,
   };
@@ -119,10 +148,77 @@ export function pushSimulationResult(result: SimMetrics) {
     metrics: cloneMetrics(result),
     result: cloneMetrics(result),
     feed: snapshot.feed,
+    hiddenFeedCount: snapshot.hiddenFeedCount,
+    anchorTimestampMs: snapshot.anchorTimestampMs,
     running: false,
     simulationId: snapshot.simulationId,
   };
   emit();
+}
+
+function flushPendingFeed() {
+  feedFlushHandle = null;
+
+  if (pendingFeed.length === 0) {
+    return;
+  }
+
+  const queued = pendingFeed;
+  pendingFeed = [];
+
+  const currentSimulationId = snapshot.simulationId;
+  const accepted = queued.filter(
+    (message) =>
+      currentSimulationId === null || message.simulationId === currentSimulationId
+  );
+
+  if (accepted.length === 0) {
+    return;
+  }
+
+  accepted.sort((a, b) => b.timestampMs - a.timestampMs);
+
+  const seen = new Set(snapshot.feed.map((item) => item.id));
+  const additions: SimulationFeedMessage[] = [];
+
+  for (const message of accepted) {
+    const id = `${message.simulationId}:${message.sender}:${message.timestampMs}:${message.text}`;
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    additions.push({ ...message, id });
+  }
+
+  if (additions.length === 0) {
+    return;
+  }
+
+  let nextFeed = [...additions, ...snapshot.feed];
+  let hiddenFeedCount = snapshot.hiddenFeedCount;
+  if (nextFeed.length > MAX_SIMULATION_FEED) {
+    hiddenFeedCount += nextFeed.length - MAX_SIMULATION_FEED;
+    nextFeed = nextFeed.slice(0, MAX_SIMULATION_FEED);
+  }
+
+  const oldestAddition = additions[additions.length - 1];
+
+  snapshot = {
+    ...snapshot,
+    feed: nextFeed,
+    hiddenFeedCount,
+    anchorTimestampMs:
+      snapshot.anchorTimestampMs ?? oldestAddition?.timestampMs ?? null,
+    simulationId: snapshot.simulationId ?? additions[0]?.simulationId ?? null,
+  };
+  emit();
+}
+
+function scheduleFeedFlush() {
+  if (feedFlushHandle !== null) {
+    return;
+  }
+  feedFlushHandle = window.requestAnimationFrame(flushPendingFeed);
 }
 
 export function pushSimulationFeedMessage(message: Omit<SimulationFeedMessage, "id">) {
@@ -133,19 +229,6 @@ export function pushSimulationFeedMessage(message: Omit<SimulationFeedMessage, "
     return;
   }
 
-  const entry: SimulationFeedMessage = {
-    ...message,
-    id: `${message.simulationId}:${message.sender}:${message.timestampMs}:${message.text}`,
-  };
-
-  if (snapshot.feed.some((item) => item.id === entry.id)) {
-    return;
-  }
-
-  snapshot = {
-    ...snapshot,
-    simulationId: snapshot.simulationId ?? message.simulationId,
-    feed: [entry, ...snapshot.feed].slice(0, MAX_SIMULATION_FEED),
-  };
-  emit();
+  pendingFeed.push(message);
+  scheduleFeedFlush();
 }

@@ -1,21 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSimulation } from "../hooks/useSimulation";
 import type {
   SimBotStatus as BotStatus,
   SimulationFeedMessage,
   SimulationMode,
 } from "../types";
+import { Header } from "./Header";
+import { StatusBadge } from "./StatusBadge";
 import s from "./VisualizationPanel.module.css";
 
 interface Props {
   onClose: () => void;
+  onDisconnect: () => void;
   sendCommand: (raw: string) => Promise<void> | void;
 }
+
+type FeedFilter = "all" | "messages" | "server";
 
 const TRAFFIC_HISTORY_SIZE = 40;
 const SPARK_WIDTH = 240;
 const SPARK_HEIGHT = 42;
 const SPARK_PADDING = 4;
+const FEED_ROW_HEIGHT = 34;
 
 const PHASE_LABELS: Record<string, string> = {
   idle: "Ожидание",
@@ -27,22 +34,39 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 const MODE_LABELS: Record<SimulationMode, string> = {
-  visible: "Visible",
-  benchmark: "Benchmark",
+  visible: "Наблюдение",
+  benchmark: "Нагрузка",
+};
+
+const MODE_CODES: Record<SimulationMode, string> = {
+  visible: "VISIBLE",
+  benchmark: "BENCHMARK",
 };
 
 function formatSession(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const sec = Math.floor(seconds % 60);
-  return `${m}м ${sec}с`;
+  const totalMs = Math.max(0, Math.round(seconds * 1000));
+  const totalSec = Math.floor(totalMs / 1000);
+  const m = Math.floor(totalSec / 60);
+  const sec = String(totalSec % 60).padStart(2, "0");
+  return `${m}:${sec}`;
 }
 
-function formatStamp(timestampMs: number) {
-  return new Date(timestampMs).toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+function formatBotName(name: string) {
+  if (name === "Server") {
+    return "Server";
+  }
+
+  const suffix = name.match(/(\d{3})(?!.*\d)/)?.[1];
+  return suffix ? `bot_${suffix}` : name;
+}
+
+function formatRelativeStamp(timestampMs: number, anchorTimestampMs: number | null) {
+  const deltaMs = Math.max(0, timestampMs - (anchorTimestampMs ?? timestampMs));
+  const totalSeconds = Math.floor(deltaMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  const millis = String(deltaMs % 1000).padStart(3, "0");
+  return `+${minutes}:${seconds}.${millis}`;
 }
 
 function buildSparkline(values: number[]) {
@@ -153,12 +177,10 @@ function TopologyView({
       <text x={centerX} y={centerY + 1} className={s.topologyServerText}>
         SERVER
       </text>
-      <text x={centerX} y={centerY + 4.4} className={s.topologyServerSub}>
-        :5000
-      </text>
 
       {nodes.map((node) => (
         <g key={node.bot.name}>
+          <title>{node.bot.name}</title>
           <circle
             cx={node.x}
             cy={node.y}
@@ -178,7 +200,7 @@ function TopologyView({
             y={node.y + (node.y > centerY ? 4 : -2.8)}
             className={s.topologyLabel}
           >
-            {node.bot.name}
+            {formatBotName(node.bot.name)}
           </text>
         </g>
       ))}
@@ -186,28 +208,55 @@ function TopologyView({
   );
 }
 
-function FeedRow({ item }: { item: SimulationFeedMessage }) {
-  const tagClass =
-    item.sender === "Server" ? `${s.logTag} ${s.logTagServer}` : `${s.logTag} ${s.logTagBot}`;
-  const tagLabel = item.sender === "Server" ? "SERVER" : "BOT";
+function FeedRow({
+  item,
+  anchorTimestampMs,
+}: {
+  item: SimulationFeedMessage;
+  anchorTimestampMs: number | null;
+}) {
+  const isServer = item.sender === "Server";
+  const shortName = formatBotName(item.sender);
 
   return (
-    <div className={s.logItem} key={item.id}>
-      <span className={s.logTime}>{formatStamp(item.timestampMs)}</span>
-      <span className={tagClass}>{tagLabel}</span>
-      <span className={s.logBot}>{item.sender}</span>
+    <div className={s.logItem} title={`${item.sender} · ${item.text}`}>
+      <span className={s.logTime}>
+        {formatRelativeStamp(item.timestampMs, anchorTimestampMs)}
+      </span>
+      <span className={`${s.logTag} ${isServer ? s.logTagServer : s.logTagBot}`}>
+        {isServer ? "SERVER" : "MSG"}
+      </span>
+      <span className={s.logBot}>{shortName}</span>
       <span className={s.logText}>{item.text}</span>
     </div>
   );
 }
 
-export function VisualizationPanel({ onClose, sendCommand }: Props) {
-  const { metrics, result, feed, running, mode, setMode, start, stop, isDone, passed } =
-    useSimulation(sendCommand);
+export function VisualizationPanel({
+  onClose,
+  onDisconnect,
+  sendCommand,
+}: Props) {
+  const {
+    metrics,
+    result,
+    feed,
+    hiddenFeedCount,
+    anchorTimestampMs,
+    running,
+    mode,
+    setMode,
+    start,
+    stop,
+    isDone,
+    passed,
+  } = useSimulation(sendCommand);
   const [count, setCount] = useState("55");
   const [trafficHistory, setTrafficHistory] = useState<number[]>(
     Array.from({ length: TRAFFIC_HISTORY_SIZE }, () => 0)
   );
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const feedParentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -226,7 +275,9 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
 
   const displayMetrics = result ?? metrics;
   const phase = displayMetrics.phase || "idle";
-  const effectiveMode = running ? metrics.mode : result?.mode ?? mode;
+  const sessionMode =
+    running ? metrics.mode : result?.mode ?? displayMetrics.mode ?? mode;
+  const selectedMode = running ? metrics.mode : mode;
   const requestedBots = Math.max(
     0,
     displayMetrics.requestedClients || Number(count) || 0
@@ -241,21 +292,24 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
     connectedAll &&
     !hasConnectionErrors &&
     !hasVerificationErrors;
+  const wasCancelled = phase === "cancelled";
 
-  const resultText = passedResult
-    ? `ПРОЙДЕН — ${MODE_LABELS[displayMetrics.mode]} · подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}, ошибок проверки нет`
-    : [
-        `НЕ ПРОЙДЕН — ${MODE_LABELS[displayMetrics.mode]} · подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}`,
-        hasConnectionErrors
-          ? `ошибок подключения: ${displayMetrics.failedConnections}`
-          : null,
-        hasVerificationErrors
-          ? `ошибок проверки: ${displayMetrics.incorrectResponses}`
-          : null,
-        !connectedAll ? "не все боты успели подключиться" : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
+  const resultText = wasCancelled
+    ? "Симуляция остановлена вручную."
+    : passedResult
+      ? `Подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}`
+      : [
+          `Подключено ${displayMetrics.totalConnected}/${requestedBots || displayMetrics.totalConnected}`,
+          hasConnectionErrors
+            ? `ошибки подключения ${displayMetrics.failedConnections}`
+            : null,
+          hasVerificationErrors
+            ? `ошибки проверки ${displayMetrics.incorrectResponses}`
+            : null,
+          !connectedAll ? "не все боты подключились" : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   useEffect(() => {
     const sample =
@@ -272,6 +326,23 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
     }
   }, [phase, running]);
 
+  const filteredFeed = useMemo(() => {
+    if (feedFilter === "server") {
+      return feed.filter((item) => item.sender === "Server");
+    }
+    if (feedFilter === "messages") {
+      return feed.filter((item) => item.sender !== "Server");
+    }
+    return feed;
+  }, [feed, feedFilter]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredFeed.length,
+    getScrollElement: () => feedParentRef.current,
+    estimateSize: () => FEED_ROW_HEIGHT,
+    overscan: 12,
+  });
+
   const { line, area, last } = useMemo(
     () => buildSparkline(trafficHistory),
     [trafficHistory]
@@ -279,96 +350,74 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
 
   const trafficNow = trafficHistory[trafficHistory.length - 1] ?? 0;
   const trafficPeak = Math.max(...trafficHistory, 0);
-  const visibleFeed = useMemo(() => feed.slice(0, 14), [feed]);
-  const previewMessages = useMemo(() => feed.slice(0, 8), [feed]);
   const topologyBots = displayMetrics.botStatuses;
   const activeBots =
     topologyBots.length > 0
       ? topologyBots.filter((bot) => bot.status === "active").length
       : displayMetrics.activeClients;
 
+  const deliveryPercent = displayMetrics.messagesSent
+    ? Math.round((displayMetrics.echoConfirmed / displayMetrics.messagesSent) * 100)
+    : 0;
+  const lossCount =
+    displayMetrics.failedConnections + displayMetrics.incorrectResponses;
+
   const metricCards = [
     {
-      label: "активных",
+      label: "активные",
       value: displayMetrics.activeClients,
       className: `${s.metricCard} ${s.metricCardGood}`,
-      big: true,
     },
     {
       label: "pkt/s",
       value: displayMetrics.messagesPerSecond.toFixed(0),
       className: `${s.metricCard} ${s.metricCardAccent}`,
-      big: true,
     },
     {
-      label: "доставлено ботам",
-      value: displayMetrics.messagesReceived,
-      className: s.metricCard,
-      big: false,
-    },
-    {
-      label: "доставлено watcher-у",
-      value: displayMetrics.watcherDeliveries,
-      className:
-        effectiveMode === "visible"
-          ? `${s.metricCard} ${s.metricCardAccent}`
-          : s.metricCard,
-      big: false,
+      label: "доставка",
+      value: `${deliveryPercent}%`,
+      className: `${s.metricCard} ${deliveryPercent >= 95 ? s.metricCardGood : ""}`,
     },
     {
       label: "p50",
       value: `${displayMetrics.p50ResponseMs.toFixed(1)}мс`,
       className: s.metricCard,
-      big: false,
     },
     {
       label: "p95",
       value: `${displayMetrics.p95ResponseMs.toFixed(1)}мс`,
       className: s.metricCard,
-      big: false,
     },
     {
-      label: "ответов сервера",
-      value: displayMetrics.serverResponsesConfirmed,
-      className: s.metricCard,
-      big: false,
-    },
-    {
-      label: "ошибок проверки",
-      value: displayMetrics.incorrectResponses,
+      label: "потери",
+      value: lossCount,
       className:
-        displayMetrics.incorrectResponses > 0
+        lossCount > 0
           ? `${s.metricCard} ${s.metricCardWarn}`
           : `${s.metricCard} ${s.metricCardGood}`,
-      big: false,
     },
   ];
 
-  return (
-    <div className={s.overlay}>
-      <button className={s.backdrop} onClick={onClose} aria-label="Закрыть" />
-      <section className={s.workspace} aria-label="Симуляция нагрузки">
-        <div className={s.titlebar}>
-          <div className={s.titlebarBrand}>
-            <span className={s.titlebarPage}>Симуляция</span>
-            <span className={`${s.sessionBadge} ${running ? s.sessionBadgeActive : ""}`}>
-              {running ? "● ACTIVE" : "○ READY"}
-            </span>
-          </div>
-          <button className={s.closeBtn} onClick={onClose} aria-label="Закрыть">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="m18 6-12 12M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+  const detailRows = [
+    { label: "Отправлено ботами", value: displayMetrics.messagesSent },
+    { label: "Доставлено пакетов", value: displayMetrics.messagesReceived },
+    { label: "Watcher delivery", value: displayMetrics.watcherDeliveries },
+    { label: "Подтверждено ACK", value: displayMetrics.echoConfirmed },
+    {
+      label: "Ответов сервера",
+      value: displayMetrics.serverResponsesConfirmed,
+    },
+  ];
 
+  const feedFilters: Array<{ key: FeedFilter; label: string }> = [
+    { key: "all", label: "Все" },
+    { key: "messages", label: "Сообщения" },
+    { key: "server", label: "Server" },
+  ];
+
+  return (
+    <section className={s.overlay} aria-label="Симуляция нагрузки">
+      <div className={s.workspace}>
         <div className={s.columns}>
           <aside className={s.leftRail}>
             <div className={s.sectionLabel}>Управление</div>
@@ -407,47 +456,54 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
             <div className={s.profileStack}>
               <button
                 type="button"
-                className={`${s.profileCard} ${effectiveMode === "visible" ? s.profileCardActive : ""}`}
+                className={`${s.profileCard} ${selectedMode === "visible" ? s.profileCardActive : ""}`}
                 onClick={() => setMode("visible")}
                 disabled={running}
               >
                 <div className={s.profileHead}>
                   <span
                     className={
-                      effectiveMode === "visible" ? s.profileRadio : s.profileRadioMuted
+                      selectedMode === "visible" ? s.profileRadio : s.profileRadioMuted
                     }
                   />
-                  <span className={s.profileName}>Visible</span>
+                  <span className={s.profileName}>Наблюдение</span>
+                  <span className={s.profileCode}>{MODE_CODES.visible}</span>
                 </div>
                 <div className={s.profileDesc}>
-                  Боты шлют реальные MESSAGE всем подключённым наблюдателям. Desktop/CLI видят метрики, Android видит сам поток.
+                  Реальный watcher-поток для desktop, CLI и Android. Видна разница по клиентам.
                 </div>
               </button>
               <button
                 type="button"
-                className={`${s.profileCard} ${effectiveMode === "benchmark" ? s.profileCardActive : ""}`}
+                className={`${s.profileCard} ${selectedMode === "benchmark" ? s.profileCardActive : ""}`}
                 onClick={() => setMode("benchmark")}
                 disabled={running}
               >
                 <div className={s.profileHead}>
                   <span
                     className={
-                      effectiveMode === "benchmark" ? s.profileRadio : s.profileRadioMuted
+                      selectedMode === "benchmark" ? s.profileRadio : s.profileRadioMuted
                     }
                   />
-                  <span className={s.profileName}>Benchmark</span>
+                  <span className={s.profileName}>Нагрузка</span>
+                  <span className={s.profileCode}>{MODE_CODES.benchmark}</span>
                 </div>
                 <div className={s.profileDesc}>
-                  Только серверные метрики без watcher-потока. Чистый ceiling маршрутизации.
+                  Серверная оценка без watcher-feed. Чистый ceiling маршрутизации.
                 </div>
               </button>
             </div>
+            {!running && selectedMode !== sessionMode && (
+              <div className={s.modeHint}>
+                Следующий запуск: {MODE_LABELS[selectedMode]}
+              </div>
+            )}
 
-            <div className={s.sectionLabel}>Срез</div>
+            <div className={s.sectionLabel}>Сессия</div>
             <div className={s.kpiStack}>
               <div className={s.kpiRow}>
                 <span className={s.kpiLabel}>Режим</span>
-                <span className={s.kpiValue}>{MODE_LABELS[effectiveMode]}</span>
+                <span className={s.kpiValue}>{MODE_LABELS[sessionMode]}</span>
               </div>
               <div className={s.kpiRow}>
                 <span className={s.kpiLabel}>Фаза</span>
@@ -460,30 +516,23 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
                 </span>
               </div>
               <div className={s.kpiRow}>
-                <span className={s.kpiLabel}>Watcher delivery</span>
-                <span className={s.kpiValue}>{displayMetrics.watcherDeliveries}</span>
-              </div>
-              <div className={s.kpiRow}>
-                <span className={s.kpiLabel}>Сообщений/сек</span>
-                <span className={s.kpiValue}>{displayMetrics.messagesPerSecond.toFixed(1)}</span>
-              </div>
-              <div className={s.kpiRow}>
-                <span className={s.kpiLabel}>P95 RTT</span>
-                <span className={s.kpiValue}>{displayMetrics.p95ResponseMs.toFixed(1)}мс</span>
+                <span className={s.kpiLabel}>Длительность</span>
+                <span className={s.kpiValue}>{formatSession(displayMetrics.elapsedSeconds)}</span>
               </div>
             </div>
 
             <div className={s.leftRailFooter}>
-              <span className={`${s.streamDot} ${running ? s.streamDotActive : ""}`} />
+              <StatusBadge variant={running ? "active" : "ready"}>
+                {running ? "Активно" : "Готов"}
+              </StatusBadge>
               <div className={s.streamMeta}>
-                <div className={s.streamTitle}>
-                  {running ? MODE_LABELS[displayMetrics.mode] : "Готово к запуску"}
+                <div className={s.streamTitle}>{MODE_LABELS[selectedMode]}</div>
+                <div className={s.streamSub}>
+                  {selectedMode === "visible"
+                    ? "Watcher-поток активен только в visible"
+                    : "Watcher-поток отключён"}
                 </div>
-                <div className={s.streamSub}>{trafficNow.toFixed(1)} pkt/s</div>
               </div>
-              <button type="button" className={s.exitPanelBtn} onClick={onClose}>
-                Вернуться
-              </button>
             </div>
           </aside>
 
@@ -514,9 +563,9 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
               <div className={s.topologyStage}>
                 {topologyBots.length === 0 ? (
                   <div className={s.topologyEmpty}>
-                    {effectiveMode === "benchmark"
-                      ? "Benchmark не mirror-ит watcher-поток и не стримит bot status."
-                      : "Статусы ботов появятся после подключения visible-сессии."}
+                    {sessionMode === "benchmark"
+                      ? "В benchmark бот-статусы не стримятся в watcher-UI."
+                      : "Статусы появятся после старта visible-сессии."}
                   </div>
                 ) : (
                   <TopologyView
@@ -529,38 +578,80 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
 
             <section className={s.logCard}>
               <div className={s.logHeader}>
-                <div className={s.sectionLabel}>Visible feed</div>
+                <div>
+                  <div className={s.sectionLabel}>Поток</div>
+                  <div className={s.logSubhead}>
+                    {sessionMode === "visible"
+                      ? "Реальные mirrored MESSAGE watcher-потока"
+                      : "Benchmark не отправляет watcher-feed"}
+                  </div>
+                </div>
                 <div className={s.logChips}>
-                  <span className={`${s.logChip} ${s.logChipActive}`}>
-                    {MODE_LABELS[effectiveMode]}
-                  </span>
-                  <span className={s.logHint}>
-                    {effectiveMode === "visible" ? "real MESSAGE feed" : "metrics only"}
-                  </span>
+                  {feedFilters.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      className={`${s.logChip} ${feedFilter === filter.key ? s.logChipActive : ""}`}
+                      onClick={() => setFeedFilter(filter.key)}
+                      disabled={sessionMode !== "visible"}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                  {hiddenFeedCount > 0 && (
+                    <span className={s.logOverflow}>+{hiddenFeedCount} скрыто</span>
+                  )}
                 </div>
               </div>
-              <div className={s.logList}>
-                {effectiveMode !== "visible" ? (
+              <div className={s.logViewport} ref={feedParentRef}>
+                {sessionMode !== "visible" ? (
                   <div className={s.logEmpty}>
-                    Benchmark не шлёт watcher-сообщения. Здесь остаётся только финальная метрика.
+                    В режиме «Нагрузка» UI не получает watcher-поток и показывает только метрики.
                   </div>
-                ) : visibleFeed.length === 0 ? (
+                ) : filteredFeed.length === 0 ? (
                   <div className={s.logEmpty}>
-                    После старта сюда начнут приходить реальные MESSAGE пакеты от visible-ботов.
+                    После запуска сюда начнут поступать реальные сообщения симуляции.
                   </div>
                 ) : (
-                  visibleFeed.map((item) => <FeedRow key={item.id} item={item} />)
+                  <div
+                    className={s.logCanvas}
+                    style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const item = filteredFeed[virtualRow.index];
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={s.logRow}
+                          style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        >
+                          <FeedRow
+                            item={item}
+                            anchorTimestampMs={anchorTimestampMs}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </section>
           </main>
 
           <aside className={s.rightRail}>
-            <div className={s.sectionLabel}>Метрики · live</div>
+            <div className={s.rightRailHeader}>
+              <div className={s.sectionLabel}>Метрики</div>
+              <Header
+                showVisualization={true}
+                onToggleVisualization={onClose}
+                onDisconnect={onDisconnect}
+              />
+            </div>
             <div className={s.metricsGrid}>
               {metricCards.map((item) => (
                 <div className={item.className} key={item.label}>
-                  <div className={item.big ? s.metricBig : s.metricValue}>{item.value}</div>
+                  <div className={s.metricBig}>{item.value}</div>
                   <div className={s.metricLabel}>{item.label}</div>
                 </div>
               ))}
@@ -569,7 +660,9 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
             <div className={s.throughputCard}>
               <div className={s.cardHeader}>
                 <span className={s.throughputTitle}>Пропускная способность</span>
-                <span className={s.throughputSub}>60с</span>
+                <StatusBadge variant={running ? "live" : "ready"}>
+                  {running ? "Live" : "Готов"}
+                </StatusBadge>
               </div>
               <svg
                 className={s.sparkSvg}
@@ -598,60 +691,45 @@ export function VisualizationPanel({ onClose, sendCommand }: Props) {
               </div>
             </div>
 
-            <div className={s.previewCard}>
-              <div className={s.previewHeader}>
-                <span className={s.sectionLabel}>Последние сообщения</span>
-                <span className={s.liveTag}>
-                  {effectiveMode === "visible" ? "LIVE" : "OFF"}
-                </span>
+            <div className={s.detailCard}>
+              <div className={s.detailHeader}>
+                <span className={s.sectionLabel}>Детали</span>
               </div>
-              <div className={s.previewList}>
-                {effectiveMode !== "visible" ? (
-                  <div className={s.previewEmpty}>
-                    В Benchmark watcher-поток отключён.
+              <div className={s.detailRows}>
+                {detailRows.map((item) => (
+                  <div className={s.detailRow} key={item.label}>
+                    <span className={s.detailLabel}>{item.label}</span>
+                    <span className={s.detailValue}>{item.value}</span>
                   </div>
-                ) : previewMessages.length === 0 ? (
-                  <div className={s.previewEmpty}>
-                    Первые mirrored сообщения появятся здесь после старта.
-                  </div>
-                ) : (
-                  previewMessages.map((entry) => (
-                    <div className={s.previewItem} key={`preview-${entry.id}`}>
-                      <div className={s.previewAvatar}>
-                        {entry.sender.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className={s.previewBody}>
-                        <div className={s.previewMeta}>
-                          <span className={s.previewBot}>{entry.sender}</span>
-                          <span className={s.previewTime}>
-                            {formatStamp(entry.timestampMs)}
-                          </span>
-                        </div>
-                        <div className={s.previewBubble}>{entry.text}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                ))}
               </div>
             </div>
 
             {isDone && (
-              <div className={`${s.resultBanner} ${passedResult ? s.resultPass : s.resultFail}`}>
-                {resultText}
+              <div
+                className={`${s.resultBanner} ${
+                  wasCancelled
+                    ? s.resultNeutral
+                    : passedResult
+                      ? s.resultPass
+                      : s.resultFail
+                }`}
+              >
+                <StatusBadge
+                  variant={wasCancelled ? "ready" : passedResult ? "ok" : "error"}
+                >
+                  {wasCancelled
+                    ? "Остановлено"
+                    : passedResult
+                      ? "Пройден"
+                      : "Не пройден"}
+                </StatusBadge>
+                <span className={s.resultText}>{resultText}</span>
               </div>
             )}
-
-            <div className={s.footerBadge}>
-              <span className={`${s.footerDot} ${running ? s.footerDotActive : ""}`} />
-              <span>
-                {displayMetrics.elapsedSeconds > 0
-                  ? `Сессия ${formatSession(displayMetrics.elapsedSeconds)}`
-                  : "Ожидание запуска"}
-              </span>
-            </div>
           </aside>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }

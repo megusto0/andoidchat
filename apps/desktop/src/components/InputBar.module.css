@@ -120,13 +120,6 @@
   color: var(--text-secondary);
 }
 
-.markdownLabel {
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
 .textarea {
   display: block;
   width: 100%;

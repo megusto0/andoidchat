@@ -10,6 +10,8 @@ interface UseSimulationResult {
   metrics: ReturnType<typeof getSimulationSnapshot>["metrics"];
   result: ReturnType<typeof getSimulationSnapshot>["result"];
   feed: SimulationFeedMessage[];
+  hiddenFeedCount: number;
+  anchorTimestampMs: number | null;
   running: boolean;
   mode: SimulationMode;
   setMode: Dispatch<SetStateAction<SimulationMode>>;
@@ -69,6 +71,8 @@ export function useSimulation(
     metrics: snapshot.metrics,
     result: snapshot.result,
     feed: snapshot.feed,
+    hiddenFeedCount: snapshot.hiddenFeedCount,
+    anchorTimestampMs: snapshot.anchorTimestampMs,
     running: snapshot.running,
     mode,
     setMode,

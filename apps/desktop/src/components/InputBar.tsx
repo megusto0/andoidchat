@@ -93,7 +93,7 @@ export function InputBar({
     <div className={s.bar}>
       <div className={s.statusBar}>
         {chats.length === 0 ? (
-          <span className={s.statusLabel}>Current chat</span>
+          <span className={s.statusLabel}>Контекст</span>
         ) : (
           chats.map((chat) => {
             const isActive = chat.id === activeChatId;
@@ -125,7 +125,6 @@ export function InputBar({
             <span className={s.chipText}>{chipMainText}</span>
             {chipSubText && <span className={s.chipSub}>{chipSubText}</span>}
           </span>
-          <span className={s.markdownLabel}>Markdown</span>
         </div>
         <textarea
           ref={textareaRef}

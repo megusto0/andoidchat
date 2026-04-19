@@ -1,9 +1,8 @@
 import net from "node:net";
-import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { forwardSignalsToChild, spawnCommand } from "./spawn-command.mjs";
 
 const host = "127.0.0.1";
 const port = 1420;
@@ -118,18 +117,24 @@ if (await canConnect(host, port)) {
   await killListener(port);
 }
 
-const viteCmd = path.join(projectDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
-if (!existsSync(viteCmd)) {
-  console.error("Missing local Vite binary. Run `npm run desktop:install` and try again.");
-  process.exit(1);
-}
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const child = spawn(
+  npmCmd,
+  ["run", "dev", "--", "--host", host, "--port", String(port), "--strictPort"],
+  {
+    stdio: "inherit",
+    cwd: projectDir,
+  }
+);
 
-const child = spawnCommand(viteCmd, ["--host", host, "--port", String(port), "--strictPort"], {
-  stdio: "inherit",
-  cwd: projectDir,
-});
+const forwardSignal = (signal) => {
+  if (!child.killed) {
+    child.kill(signal);
+  }
+};
 
-forwardSignalsToChild(child);
+process.on("SIGINT", () => forwardSignal("SIGINT"));
+process.on("SIGTERM", () => forwardSignal("SIGTERM"));
 
 child.on("exit", (code) => {
   process.exit(code ?? 0);

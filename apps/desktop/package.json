@@ -11,6 +11,7 @@
     "tauri:doctor": "node scripts/run-tauri-dev.mjs --check"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2",
     "react": "^18",
     "react-dom": "^18"

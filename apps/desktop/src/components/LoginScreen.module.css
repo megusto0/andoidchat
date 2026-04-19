@@ -1,10 +1,12 @@
 /* LoginScreen — экран входа, тёмная тема */
 
 .backdrop {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 0;
+  overflow: auto;
   padding: 24px;
   background:
     radial-gradient(ellipse at 30% 20%, rgba(217, 119, 47, 0.10) 0%, transparent 56%),

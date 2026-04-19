@@ -1,9 +1,13 @@
 import { useState } from "react";
-import type { ClientPlatform, GroupMode } from "../types";
+import type { ClientPlatform, ConnectionStatus, GroupMode } from "../types";
+import { StatusBadge } from "./StatusBadge";
 import s from "./Sidebar.module.css";
 
 interface Props {
   userName: string;
+  host: string;
+  port: string;
+  status: ConnectionStatus;
   clients: string[];
   onlineClients: Set<string>;
   clientPlatforms: Record<string, ClientPlatform>;
@@ -21,6 +25,9 @@ function avatarColors(letter: string) {
 
 export function Sidebar({
   userName,
+  host,
+  port,
+  status,
   clients,
   onlineClients,
   clientPlatforms,
@@ -38,6 +45,7 @@ export function Sidebar({
   const otherClients = orderedClients.filter((c) => c !== userName);
   const hasSelected = selectedClients.size > 0;
   const searchValue = search.trim().toLowerCase();
+  const endpoint = host && port ? `${host}:${port}` : "—";
   const visibleClients = searchValue
     ? otherClients.filter((name) =>
         name.toLowerCase().includes(searchValue)
@@ -85,26 +93,13 @@ export function Sidebar({
         </div>
         <div className={s.userInfo}>
           <div className={s.userNameText}>{userName}</div>
-          <div className={s.userSubtitle}>
-            <span className={s.userStatusDot} />
-            Подключен · General
+          <div className={s.userMetaRow}>
+            <StatusBadge variant={status === "connected" ? "ok" : "ready"}>
+              {status === "connected" ? "Подключен" : "Отключен"}
+            </StatusBadge>
+            <span className={s.endpointText}>{endpoint}</span>
           </div>
         </div>
-        <button className={s.settingsBtn} aria-label="Настройки">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
       </div>
 
       <div className={`${s.section} ${s.clientSection} ${s.surfaceSection}`}>

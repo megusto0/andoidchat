@@ -3,6 +3,7 @@ import { useTauri } from "./hooks/useTauri";
 import { useChatReducer } from "./hooks/useChatReducer";
 import { LoginScreen } from "./components/LoginScreen";
 import { ChatLayout } from "./components/ChatLayout";
+import { WindowTitlebar } from "./components/WindowTitlebar";
 import type { GroupMode } from "./types";
 
 import "./styles/global.css";
@@ -37,28 +38,36 @@ export default function App() {
     dispatch({ type: "TOGGLE_VISUALIZATION" });
   }, [dispatch]);
 
-  if (state.screen === "login") {
-    return (
-      <LoginScreen
-        onConnect={connect}
-        onDiscoverServer={discoverServer}
-        status={state.connectionStatus}
-        error={state.error}
-      />
-    );
-  }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <ChatLayout
-        state={state}
-        sendMessage={handleSendMessage}
-        disconnect={disconnect}
-        setGroup={handleSetGroup}
-        switchChat={handleSwitchChat}
-        toggleVisualization={handleToggleVisualization}
-        sendCommand={sendCommand}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+      }}
+    >
+      <WindowTitlebar
+        meta={state.screen === "chat" ? `${state.host}:${state.port}` : undefined}
       />
+      {state.screen === "login" ? (
+        <LoginScreen
+          onConnect={connect}
+          onDiscoverServer={discoverServer}
+          status={state.connectionStatus}
+          error={state.error}
+        />
+      ) : (
+        <ChatLayout
+          state={state}
+          sendMessage={handleSendMessage}
+          disconnect={disconnect}
+          setGroup={handleSetGroup}
+          switchChat={handleSwitchChat}
+          toggleVisualization={handleToggleVisualization}
+          sendCommand={sendCommand}
+        />
+      )}
     </div>
   );
 }

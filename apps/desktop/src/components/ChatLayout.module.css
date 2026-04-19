@@ -39,14 +39,23 @@
 }
 
 .chatHeader {
-  height: 60px;
-  padding: 0 24px;
+  min-height: 64px;
+  padding: 14px 24px 12px;
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   flex-shrink: 0;
+}
+
+.chatHeaderLead {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .chatHeaderInfo {
@@ -84,95 +93,33 @@
   letter-spacing: 0.02em;
 }
 
-.chatHeaderMeta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.chatHeaderScope {
   font-size: 12px;
   color: var(--text-tertiary);
-}
-
-.chatHeaderDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  flex-shrink: 0;
-}
-
-.chatHeaderDotOffline {
-  background: var(--text-tertiary);
-}
-
-.chatHeaderHost {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.chatHeaderSep {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.chatHeaderPing {
-  font-family: var(--font-mono);
-  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chatHeaderActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-shrink: 0;
 }
 
-.simBtn {
-  display: flex;
+.menuBtn {
+  display: none;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 500;
   color: var(--text-secondary);
-  background: transparent;
-  transition:
-    background var(--duration-fast),
-    color var(--duration-fast),
-    border-color var(--duration-fast);
+  flex-shrink: 0;
+  transition: background var(--duration-fast), color var(--duration-fast);
 }
 
-.simBtn:hover {
-  background: var(--bg-elevated);
+.menuBtn:hover {
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
-  border-color: var(--text-secondary);
-}
-
-.simBtnActive {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.simBtnActive:hover {
-  border-color: var(--accent-hover);
-  color: var(--accent-hover);
-}
-
-.logoutBtn {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  transition:
-    color var(--duration-fast),
-    background var(--duration-fast);
-}
-
-.logoutBtn:hover {
-  color: var(--error);
-  background: var(--error-bg);
 }
 
 .sidebarOverlay {
@@ -183,7 +130,7 @@
   .sidebarOverlay {
     display: block;
     position: fixed;
-    inset: 56px 0 0 0;
+    inset: var(--window-titlebar-height) 0 0 0;
     background: var(--bg-overlay);
     z-index: 25;
     animation: fadeIn var(--duration-fast) var(--ease-out);
@@ -191,11 +138,24 @@
 
   .layout > aside:nth-child(2) {
     position: fixed;
-    top: 56px;
+    top: var(--window-titlebar-height);
     left: 0;
     bottom: 0;
     z-index: 30;
     box-shadow: var(--shadow-lg);
+  }
+
+  .chatHeader {
+    padding: 12px 12px 10px;
+    gap: 10px;
+  }
+
+  .menuBtn {
+    display: flex;
+  }
+
+  .chatHeaderActions {
+    min-width: 0;
   }
 
   .toast {

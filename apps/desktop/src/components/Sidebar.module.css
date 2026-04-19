@@ -49,41 +49,22 @@
   text-overflow: ellipsis;
 }
 
-.userSubtitle {
-  margin-top: 2px;
+.userMetaRow {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.endpointText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11.5px;
+  color: var(--text-muted);
   font-family: var(--font-mono);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.userStatusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  flex-shrink: 0;
-}
-
-.settingsBtn {
-  appearance: none;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--duration-fast), background var(--duration-fast);
-}
-
-.settingsBtn:hover {
-  color: var(--text-primary);
-  background: var(--bg-surface-hover);
 }
 
 .section {
@@ -423,7 +404,7 @@
 @media (max-width: 700px) {
   .sidebar {
     position: fixed;
-    top: 56px;
+    top: var(--window-titlebar-height);
     left: 0;
     bottom: 0;
     z-index: 30;
