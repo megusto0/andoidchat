@@ -39,7 +39,8 @@ function makeMessage(
   type: Message["type"],
   sender: string,
   text: string,
-  timestampMs = Date.now()
+  timestampMs = Date.now(),
+  simulationId: string | null = null
 ): Message {
   return {
     id: crypto.randomUUID(),
@@ -47,6 +48,7 @@ function makeMessage(
     sender,
     text,
     timestamp: new Date(timestampMs),
+    simulationId,
   };
 }
 
@@ -252,7 +254,7 @@ function appendMessageToChat(
 }
 
 function messageDedupKey(message: Message): string {
-  return `${message.sender}|${message.timestamp.getTime()}|${message.text}`;
+  return `${message.sender}|${message.timestamp.getTime()}|${message.text}|${message.simulationId ?? ""}`;
 }
 
 function mergeMessages(existing: Message[], additions: Message[]): Message[] {
@@ -493,7 +495,8 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         action.sender === state.userName ? "own" : "other",
         action.sender,
         action.text,
-        action.timestampMs
+        action.timestampMs,
+        action.simulationId ?? null
       );
       const isActive = state.activeChatId === descriptor.id;
       const chatUpdate = appendMessageToChat(state, descriptor, message, {

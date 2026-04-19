@@ -144,7 +144,6 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
                 text: parsed.text,
                 timestampMs: parsed.timestampMs,
               });
-              break;
             }
             dispatch({
               type: "MESSAGE_RECEIVED",
@@ -153,6 +152,7 @@ export function useTauri(dispatch: React.Dispatch<ChatAction>) {
               mode: parsed.mode,
               targets: parsed.targets,
               timestampMs: parsed.timestampMs,
+              simulationId: parsed.simulationId ?? null,
             });
             break;
           case "clients":

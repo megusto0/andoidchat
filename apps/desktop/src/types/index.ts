@@ -8,6 +8,7 @@ export interface Message {
   sender: string;
   text: string;
   timestamp: Date;
+  simulationId?: string | null;
 }
 
 export interface HistoryMessage {
@@ -121,6 +122,7 @@ export type ChatAction =
       mode: GroupMode;
       targets: string[];
       timestampMs: number;
+      simulationId?: string | null;
     }
   | { type: "HISTORY_SYNCED"; messages: HistoryMessage[] }
   | { type: "CLIENTS_UPDATED"; clients: string[] }

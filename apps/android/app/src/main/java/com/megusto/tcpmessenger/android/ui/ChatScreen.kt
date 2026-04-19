@@ -784,10 +784,18 @@ private fun MessageList(
 ) {
     val listState = rememberLazyListState()
     val messages = chat?.messages.orEmpty()
+    val regularMessages = remember(messages) { messages.filter { it.simulationId == null } }
+    val simulationMessages = remember(messages) { messages.filter { it.simulationId != null } }
+    var simulationCollapsed by rememberSaveable(chat?.id) { mutableStateOf(true) }
+    val visibleItemCount = regularMessages.size + if (simulationMessages.isNotEmpty()) {
+        1 + if (simulationCollapsed) 0 else simulationMessages.size
+    } else {
+        0
+    }
 
-    LaunchedEffect(chat?.id, messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.lastIndex)
+    LaunchedEffect(chat?.id, regularMessages.size, simulationMessages.size, simulationCollapsed) {
+        if (visibleItemCount > 0) {
+            listState.scrollToItem(visibleItemCount - 1)
         }
     }
 
@@ -827,9 +835,9 @@ private fun MessageList(
                 state = listState,
                 contentPadding = PaddingValues(vertical = 16.dp),
             ) {
-                itemsIndexed(messages, key = { _, msg -> msg.id }) { index, message ->
-                    val prev = messages.getOrNull(index - 1)
-                    val next = messages.getOrNull(index + 1)
+                itemsIndexed(regularMessages, key = { _, msg -> msg.id }) { index, message ->
+                    val prev = regularMessages.getOrNull(index - 1)
+                    val next = regularMessages.getOrNull(index + 1)
 
                     val isFirstInGroup = !isGroupable(message.type) ||
                         prev == null ||
@@ -863,8 +871,118 @@ private fun MessageList(
                         )
                     }
                 }
+
+                if (simulationMessages.isNotEmpty()) {
+                    item(key = "simulation-feed-header") {
+                        Spacer(Modifier.height(if (regularMessages.isEmpty()) 4.dp else 12.dp))
+                        SimulationFeedHeader(
+                            collapsed = simulationCollapsed,
+                            count = simulationMessages.size,
+                            latestMessage = simulationMessages.lastOrNull(),
+                            onToggle = { simulationCollapsed = !simulationCollapsed },
+                        )
+                    }
+
+                    if (!simulationCollapsed) {
+                        itemsIndexed(simulationMessages, key = { _, msg -> msg.id }) { index, message ->
+                            val prev = simulationMessages.getOrNull(index - 1)
+                            val next = simulationMessages.getOrNull(index + 1)
+
+                            val isFirstInGroup = !isGroupable(message.type) ||
+                                prev == null ||
+                                prev.type != message.type ||
+                                prev.sender != message.sender
+                            val isLastInGroup = !isGroupable(message.type) ||
+                                next == null ||
+                                next.type != message.type ||
+                                next.sender != message.sender
+
+                            val topSpacing = if (index == 0 || isFirstInGroup) 10.dp else 3.dp
+                            Spacer(Modifier.height(topSpacing))
+
+                            MessageBubble(
+                                message = message,
+                                isFirstInGroup = isFirstInGroup,
+                                isLastInGroup = isLastInGroup,
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SimulationFeedHeader(
+    collapsed: Boolean,
+    count: Int,
+    latestMessage: MessageItem?,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Accent.copy(alpha = 0.08f))
+            .border(
+                width = 1.dp,
+                color = Accent.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(16.dp),
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(Accent),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Visible Simulation",
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.9.sp,
+                    ),
+                    color = TextPrimary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = count.toString(),
+                    style = TextStyle(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = TextSecondary,
+                )
+            }
+            latestMessage?.let { latest ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "${latest.sender}: ${latest.text}",
+                    style = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
+                    color = TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = if (collapsed) "Показать" else "Свернуть",
+            style = TextStyle(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = TextSecondary,
+        )
     }
 }
 

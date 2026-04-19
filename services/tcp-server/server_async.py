@@ -785,10 +785,15 @@ class AsyncServer:
 
         simulation_id = context.get("simulation_id")
         metrics = context.get("metrics")
+        requester_name = context.get("requester_name")
         if not isinstance(simulation_id, str):
             return False
 
-        watchers = self._simulation_watchers(desktop_only=False)
+        watchers = [
+            watcher
+            for watcher in self._simulation_watchers(desktop_only=False)
+            if watcher.name != requester_name
+        ]
         if not watchers:
             return False
 
