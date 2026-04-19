@@ -114,6 +114,10 @@
   gap: 4px;
   padding: 0 12px 12px;
   border-top: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 /* Пустое состояние */

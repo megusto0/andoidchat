@@ -6,6 +6,7 @@ import type {
   SimulationFeedMessage,
   SimulationMode,
 } from "../types";
+import { formatSimulationSender } from "../utils/simulationNames";
 import { Header } from "./Header";
 import { StatusBadge } from "./StatusBadge";
 import s from "./VisualizationPanel.module.css";
@@ -23,6 +24,13 @@ const SPARK_WIDTH = 240;
 const SPARK_HEIGHT = 42;
 const SPARK_PADDING = 4;
 const FEED_ROW_HEIGHT = 34;
+const MAX_TOPOLOGY_BOTS = 64;
+const TOPOLOGY_VIEWBOX_WIDTH = 520;
+const TOPOLOGY_VIEWBOX_HEIGHT = 360;
+const TOPOLOGY_CENTER_X = TOPOLOGY_VIEWBOX_WIDTH / 2;
+const TOPOLOGY_CENTER_Y = TOPOLOGY_VIEWBOX_HEIGHT / 2;
+const TOPOLOGY_RING_RADII = [82, 128, 174, 220];
+const TOPOLOGY_RING_CAPACITY = [10, 14, 18, 22];
 
 const PHASE_LABELS: Record<string, string> = {
   idle: "Ожидание",
@@ -49,15 +57,6 @@ function formatSession(seconds: number) {
   const m = Math.floor(totalSec / 60);
   const sec = String(totalSec % 60).padStart(2, "0");
   return `${m}:${sec}`;
-}
-
-function formatBotName(name: string) {
-  if (name === "Server") {
-    return "Server";
-  }
-
-  const suffix = name.match(/(\d{3})(?!.*\d)/)?.[1];
-  return suffix ? `bot_${suffix}` : name;
 }
 
 function formatRelativeStamp(timestampMs: number, anchorTimestampMs: number | null) {
@@ -100,11 +99,31 @@ function buildSparkline(values: number[]) {
   return { line, area, last };
 }
 
-function statusColor(status: BotStatus["status"]) {
-  if (status === "active") return "#7ec489";
-  if (status === "connecting") return "var(--accent)";
-  if (status === "error") return "var(--error)";
-  return "var(--text-tertiary)";
+function statusLineClass(status: BotStatus["status"]) {
+  if (status === "active") return s.topologyLineActive;
+  if (status === "connecting") return s.topologyLineConnecting;
+  return "";
+}
+
+function statusNodeClass(status: BotStatus["status"]) {
+  if (status === "active") return s.topologyNodeActive;
+  if (status === "connecting") return s.topologyNodeConnecting;
+  if (status === "error") return s.topologyNodeError;
+  return s.topologyNodeDone;
+}
+
+function nodeRadius(status: BotStatus["status"]) {
+  if (status === "active") return 6.2;
+  if (status === "connecting") return 5.2;
+  if (status === "error") return 5.2;
+  return 4.1;
+}
+
+function labelStride(total: number) {
+  if (total <= 16) return 1;
+  if (total <= 28) return 2;
+  if (total <= 44) return 3;
+  return 4;
 }
 
 function TopologyView({
@@ -114,33 +133,106 @@ function TopologyView({
   bots: BotStatus[];
   elapsedSeconds: number;
 }) {
-  const visible = bots.slice(0, 18);
-  const centerX = 50;
-  const centerY = 50;
+  const visible = bots.slice(0, MAX_TOPOLOGY_BOTS);
+  const hiddenCount = Math.max(0, bots.length - visible.length);
+  const stride = labelStride(visible.length);
+  const ringDefs: Array<{ radius: number; bots: BotStatus[] }> = [];
+  let offset = 0;
 
-  const nodes = visible.map((bot, index) => {
-    const angle = (index / Math.max(visible.length, 1)) * Math.PI * 2;
-    const radius = index % 2 === 0 ? 38 : 30;
-    const x = centerX + Math.cos(angle) * radius;
-    const y = centerY + Math.sin(angle) * radius;
-    return { bot, x, y };
-  });
-
-  const packets = nodes
-    .filter((node) => node.bot.status === "active")
-    .map((node, index) => {
-      const progress = ((elapsedSeconds * 0.75 + index * 0.16) % 1 + 1) % 1;
-      return {
-        id: node.bot.name,
-        x: centerX + (node.x - centerX) * progress,
-        y: centerY + (node.y - centerY) * progress,
-      };
+  for (let ringIndex = 0; ringIndex < TOPOLOGY_RING_RADII.length; ringIndex += 1) {
+    if (offset >= visible.length) break;
+    const ringCount = Math.min(
+      TOPOLOGY_RING_CAPACITY[ringIndex],
+      visible.length - offset
+    );
+    ringDefs.push({
+      radius: TOPOLOGY_RING_RADII[ringIndex],
+      bots: visible.slice(offset, offset + ringCount),
     });
+    offset += ringCount;
+  }
+
+  const nodes = ringDefs.flatMap((ring, ringIndex) =>
+    ring.bots.map((bot, localIndex) => {
+      const globalIndex = ringDefs
+        .slice(0, ringIndex)
+        .reduce((sum, current) => sum + current.bots.length, 0) + localIndex;
+      const rotationDirection = ringIndex % 2 === 0 ? 1 : -1;
+      const rotation =
+        elapsedSeconds * (0.12 - ringIndex * 0.018) * rotationDirection;
+      const angle =
+        rotation +
+        (localIndex / Math.max(ring.bots.length, 1)) * Math.PI * 2 -
+        Math.PI / 2;
+      const breathing =
+        bot.status === "active"
+          ? Math.sin(elapsedSeconds * 1.6 + globalIndex * 0.42) * 4
+          : bot.status === "connecting"
+            ? Math.sin(elapsedSeconds * 2.2 + globalIndex * 0.38) * 6
+            : bot.status === "error"
+              ? Math.sin(elapsedSeconds * 1.9 + globalIndex * 0.25) * 2.5
+              : Math.sin(elapsedSeconds * 1.1 + globalIndex * 0.19) * 1.5;
+      const orbitRadius = ring.radius + breathing;
+      const x = TOPOLOGY_CENTER_X + Math.cos(angle) * orbitRadius;
+      const y = TOPOLOGY_CENTER_Y + Math.sin(angle) * orbitRadius;
+      const showLabel =
+        stride === 1 ||
+        bot.status === "error" ||
+        (bot.status === "active" && ringIndex === 0) ||
+        globalIndex % stride === 0;
+
+      return {
+        bot,
+        x,
+        y,
+        labelY: y + (y > TOPOLOGY_CENTER_Y ? 20 : -14),
+        radius: nodeRadius(bot.status),
+        ringIndex,
+        showLabel,
+      };
+    })
+  );
+
+  const activeNodes = nodes.filter((node) => node.bot.status === "active");
+  const connectingNodes = nodes.filter(
+    (node) => node.bot.status === "connecting"
+  );
+  const packets = activeNodes
+    .slice(0, activeNodes.length <= 14 ? 24 : 18)
+    .flatMap((node, index) => {
+      const streams = activeNodes.length <= 10 ? 2 : 1;
+
+      return Array.from({ length: streams }, (_, streamIndex) => {
+        const progress =
+          ((elapsedSeconds * (0.3 + (index % 4) * 0.035) +
+            index * 0.09 +
+            streamIndex * 0.44) %
+            1 +
+            1) %
+          1;
+        const pulse =
+          0.55 +
+          0.45 * Math.sin(elapsedSeconds * 4.8 + index * 0.6 + streamIndex);
+
+        return {
+          id: `${node.bot.name}:${streamIndex}`,
+          x:
+            TOPOLOGY_CENTER_X +
+            (node.x - TOPOLOGY_CENTER_X) * progress,
+          y:
+            TOPOLOGY_CENTER_Y +
+            (node.y - TOPOLOGY_CENTER_Y) * progress,
+          r: 1.9 + pulse * 1.2,
+          opacity: 0.28 + progress * 0.58,
+        };
+      });
+    });
+  const serverPulse = 18 + ((elapsedSeconds * 1.45) % 1) * 34;
 
   return (
     <svg
       className={s.topologySvg}
-      viewBox="0 0 100 100"
+      viewBox={`0 0 ${TOPOLOGY_VIEWBOX_WIDTH} ${TOPOLOGY_VIEWBOX_HEIGHT}`}
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
@@ -148,62 +240,150 @@ function TopologyView({
           <stop offset="0" stopColor="var(--accent)" stopOpacity="0.32" />
           <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
         </radialGradient>
+        <linearGradient id="simPacketTrail" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.05" />
+          <stop offset="1" stopColor="var(--accent)" stopOpacity="0.65" />
+        </linearGradient>
       </defs>
 
-      <circle cx={centerX} cy={centerY} r="18" fill="url(#simServerGlow)" />
-
-      {nodes.map((node) => (
-        <line
-          key={`line-${node.bot.name}`}
-          x1={centerX}
-          y1={centerY}
-          x2={node.x}
-          y2={node.y}
-          className={s.topologyLine}
-        />
-      ))}
-
-      {packets.map((packet) => (
+      {ringDefs.map((ring, index) => (
         <circle
-          key={`packet-${packet.id}`}
-          cx={packet.x}
-          cy={packet.y}
-          r="0.9"
-          className={s.topologyPacket}
+          key={`orbit-${index}`}
+          cx={TOPOLOGY_CENTER_X}
+          cy={TOPOLOGY_CENTER_Y}
+          r={ring.radius}
+          className={s.topologyOrbit}
         />
       ))}
 
-      <circle cx={centerX} cy={centerY} r="6.4" className={s.topologyServer} />
-      <text x={centerX} y={centerY + 1} className={s.topologyServerText}>
-        SERVER
-      </text>
+      <circle
+        cx={TOPOLOGY_CENTER_X}
+        cy={TOPOLOGY_CENTER_Y}
+        r={serverPulse}
+        className={s.topologyServerAura}
+      />
+      <circle
+        cx={TOPOLOGY_CENTER_X}
+        cy={TOPOLOGY_CENTER_Y}
+        r="52"
+        fill="url(#simServerGlow)"
+      />
 
       {nodes.map((node) => (
         <g key={node.bot.name}>
-          <title>{node.bot.name}</title>
+          <line
+            x1={TOPOLOGY_CENTER_X}
+            y1={TOPOLOGY_CENTER_Y}
+            x2={node.x}
+            y2={node.y}
+            className={`${s.topologyLine} ${statusLineClass(node.bot.status)}`}
+          />
+          {node.bot.status !== "done" && (
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={node.radius + 5.5 + Math.max(0, Math.sin(elapsedSeconds * 2 + node.ringIndex))}
+              className={s.topologyNodeHalo}
+            />
+          )}
           <circle
             cx={node.x}
             cy={node.y}
-            r="1.8"
-            fill={statusColor(node.bot.status)}
+            r={node.radius}
+            className={`${s.topologyNode} ${statusNodeClass(node.bot.status)}`}
           />
           {node.bot.status === "connecting" && (
             <circle
               cx={node.x}
               cy={node.y}
-              r={2.7 + ((elapsedSeconds * 2.5) % 1.8)}
+              r={node.radius + 7 + ((elapsedSeconds * 3.2 + node.ringIndex) % 4.2)}
               className={s.topologyPulseRing}
             />
           )}
-          <text
-            x={node.x}
-            y={node.y + (node.y > centerY ? 4 : -2.8)}
-            className={s.topologyLabel}
-          >
-            {formatBotName(node.bot.name)}
-          </text>
+          {node.showLabel && (
+            <text
+              x={node.x}
+              y={node.labelY}
+              className={s.topologyLabel}
+            >
+              {formatSimulationSender(node.bot.name, true)}
+            </text>
+          )}
+          <title>
+            {formatSimulationSender(node.bot.name, true)} · {node.bot.status} · {node.bot.messagesSent} сообщ.
+          </title>
         </g>
       ))}
+
+      {packets.map((packet) => (
+        <g key={`packet-${packet.id}`}>
+          <line
+            x1={TOPOLOGY_CENTER_X}
+            y1={TOPOLOGY_CENTER_Y}
+            x2={packet.x}
+            y2={packet.y}
+            className={s.topologyPacketTrail}
+          />
+          <circle
+            cx={packet.x}
+            cy={packet.y}
+            r={packet.r}
+            className={s.topologyPacket}
+            style={{ opacity: packet.opacity }}
+          />
+        </g>
+      ))}
+
+      {connectingNodes.map((node) => (
+        <circle
+          key={`scan-${node.bot.name}`}
+          cx={node.x}
+          cy={node.y}
+          r={node.radius + 10}
+          className={s.topologyConnectingScan}
+        />
+      ))}
+
+      <circle
+        cx={TOPOLOGY_CENTER_X}
+        cy={TOPOLOGY_CENTER_Y}
+        r="24"
+        className={s.topologyServerCore}
+      />
+      <circle
+        cx={TOPOLOGY_CENTER_X}
+        cy={TOPOLOGY_CENTER_Y}
+        r="16"
+        className={s.topologyServer}
+      />
+      <text
+        x={TOPOLOGY_CENTER_X}
+        y={TOPOLOGY_CENTER_Y - 4}
+        className={s.topologyServerText}
+      >
+        SERVER
+      </text>
+      <text
+        x={TOPOLOGY_CENTER_X}
+        y={TOPOLOGY_CENTER_Y + 18}
+        className={s.topologyServerSubtext}
+      >
+        {activeNodes.length} live
+      </text>
+
+      {hiddenCount > 0 && (
+        <g transform={`translate(${TOPOLOGY_VIEWBOX_WIDTH - 118} 18)`}>
+          <rect
+            className={s.topologyCountBadge}
+            width="98"
+            height="28"
+            rx="14"
+          />
+          <text x="49" y="18" className={s.topologyCountText}>
+            +{hiddenCount} hidden
+          </text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -216,7 +396,7 @@ function FeedRow({
   anchorTimestampMs: number | null;
 }) {
   const isServer = item.sender === "Server";
-  const shortName = formatBotName(item.sender);
+  const shortName = formatSimulationSender(item.sender, !isServer);
 
   return (
     <div className={s.logItem} title={`${item.sender} · ${item.text}`}>
@@ -351,6 +531,8 @@ export function VisualizationPanel({
   const trafficNow = trafficHistory[trafficHistory.length - 1] ?? 0;
   const trafficPeak = Math.max(...trafficHistory, 0);
   const topologyBots = displayMetrics.botStatuses;
+  const shownTopologyBots = Math.min(topologyBots.length, MAX_TOPOLOGY_BOTS);
+  const hiddenTopologyBots = Math.max(0, topologyBots.length - shownTopologyBots);
   const activeBots =
     topologyBots.length > 0
       ? topologyBots.filter((bot) => bot.status === "active").length
@@ -543,6 +725,8 @@ export function VisualizationPanel({
                   <div className={s.sectionLabel}>Топология сети</div>
                   <div className={s.subtleLine}>
                     {activeBots} / {topologyBots.length || requestedBots} активных
+                    {topologyBots.length > 0 ? ` · показано ${shownTopologyBots}` : ""}
+                    {hiddenTopologyBots > 0 ? ` · скрыто ${hiddenTopologyBots}` : ""}
                   </div>
                 </div>
                 <div className={s.legend}>

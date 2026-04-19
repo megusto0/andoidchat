@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { Message } from "../types";
+import { formatSimulationSender } from "../utils/simulationNames";
 import s from "./MessageBubble.module.css";
 
 interface Props {
@@ -36,6 +37,10 @@ function MessageBubbleInner({
   const isOther = message.type === "other";
   const isInfo = message.type === "info";
   const isError = message.type === "error";
+  const displaySender = formatSimulationSender(
+    message.sender,
+    Boolean(message.simulationId)
+  );
 
   if (isInfo) {
     const ipMatch = message.text.match(IP_PORT_RE);
@@ -101,7 +106,7 @@ function MessageBubbleInner({
     else bubbleShape = s.bubbleOtherMiddle;
   }
 
-  const hue = getMonogramHue(message.sender);
+  const hue = getMonogramHue(displaySender);
 
   return (
     <div
@@ -112,7 +117,7 @@ function MessageBubbleInner({
       {isOther && (
         isFirstInGroup ? (
           <div className={s.avatar} style={{ background: `oklch(0.32 0.04 ${hue})`, color: `oklch(0.85 0.05 ${hue})` }}>
-            {message.sender.charAt(0).toUpperCase()}
+            {displaySender.charAt(0).toUpperCase()}
             {isOnline && <span className={s.avatarOnline} />}
           </div>
         ) : (
@@ -122,7 +127,7 @@ function MessageBubbleInner({
       <div className={s.bubbleWrap}>
         {isOther && isFirstInGroup && (
           <div className={s.sender}>
-            <span className={s.senderName}>{message.sender}</span>
+            <span className={s.senderName}>{displaySender}</span>
             <span className={s.senderTime}>{formatTime(message.timestamp)}</span>
           </div>
         )}

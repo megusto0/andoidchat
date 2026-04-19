@@ -16,7 +16,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr) 320px;
+  grid-template-columns:
+    clamp(220px, 23vw, 276px)
+    minmax(0, 1.65fr)
+    clamp(240px, 25vw, 312px);
 }
 
 .leftRail,
@@ -48,7 +51,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 232px minmax(0, 1fr);
+  grid-template-rows: minmax(360px, 1.55fr) minmax(240px, 1fr);
   background: var(--bg-primary);
 }
 
@@ -65,6 +68,7 @@
   font-size: 11.5px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+  line-height: 1.45;
 }
 
 .controlCard,
@@ -335,10 +339,11 @@
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .cardHeader {
-  padding: 16px 20px 0;
+  padding: 18px 22px 12px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -385,7 +390,12 @@
 .topologyStage {
   flex: 1;
   min-height: 0;
-  padding: 10px 16px 16px;
+  min-height: 320px;
+  padding: 6px 20px 22px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(199, 168, 138, 0.10), transparent 34%),
+    radial-gradient(circle at 50% 50%, rgba(122, 167, 232, 0.05), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(0, 0, 0, 0.06));
 }
 
 .topologyEmpty {
@@ -406,44 +416,142 @@
   width: 100%;
   height: 100%;
   display: block;
+  overflow: visible;
+}
+
+.topologyOrbit {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 1.35;
+  stroke-dasharray: 6 10;
 }
 
 .topologyLine {
-  stroke: var(--border);
-  stroke-width: 0.15;
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 1.2;
+}
+
+.topologyLineActive {
+  stroke: rgba(126, 196, 137, 0.24);
+}
+
+.topologyLineConnecting {
+  stroke: rgba(199, 168, 138, 0.24);
+  stroke-dasharray: 4 8;
+}
+
+.topologyPacketTrail {
+  stroke: url(#simPacketTrail);
+  stroke-width: 1;
 }
 
 .topologyPacket {
   fill: var(--accent);
-  filter: drop-shadow(0 0 2px rgba(199, 168, 138, 0.42));
+  filter: drop-shadow(0 0 8px rgba(199, 168, 138, 0.42));
+}
+
+.topologyServerAura {
+  fill: none;
+  stroke: rgba(199, 168, 138, 0.16);
+  stroke-width: 2.1;
+  opacity: 0.5;
+}
+
+.topologyServerCore {
+  fill: rgba(199, 168, 138, 0.08);
+  stroke: rgba(199, 168, 138, 0.2);
+  stroke-width: 1.6;
 }
 
 .topologyServer {
   fill: var(--bg-elevated);
   stroke: var(--accent);
-  stroke-width: 0.4;
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 16px rgba(199, 168, 138, 0.16));
 }
 
 .topologyServerText {
   fill: var(--accent);
-  font-size: 2.6px;
+  font-size: 10px;
   font-weight: 700;
   text-anchor: middle;
-  dominant-baseline: middle;
+  letter-spacing: 0.22em;
+}
+
+.topologyServerSubtext {
+  fill: var(--text-muted);
+  font-size: 8px;
+  font-family: var(--font-mono);
+  text-anchor: middle;
+}
+
+.topologyNodeHalo {
+  fill: rgba(199, 168, 138, 0.04);
+}
+
+.topologyNode {
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.18));
+}
+
+.topologyNodeActive {
+  fill: #7ec489;
+  stroke: rgba(126, 196, 137, 0.28);
+}
+
+.topologyNodeConnecting {
+  fill: var(--accent);
+  stroke: rgba(199, 168, 138, 0.3);
+}
+
+.topologyNodeDone {
+  fill: rgba(255, 255, 255, 0.24);
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.topologyNodeError {
+  fill: var(--error);
+  stroke: rgba(217, 107, 107, 0.34);
+}
+
+.topologyConnectingScan {
+  fill: none;
+  stroke: rgba(199, 168, 138, 0.16);
+  stroke-width: 1.4;
+  stroke-dasharray: 7 9;
+  opacity: 0.5;
 }
 
 .topologyPulseRing {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 0.2;
-  opacity: 0.6;
+  stroke: rgba(199, 168, 138, 0.38);
+  stroke-width: 1.35;
+  opacity: 0.72;
 }
 
 .topologyLabel {
-  fill: var(--text-muted);
-  font-size: 1.45px;
+  fill: var(--text-primary);
+  font-size: 9px;
   text-anchor: middle;
   font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  paint-order: stroke;
+  stroke: rgba(11, 11, 12, 0.82);
+  stroke-width: 4px;
+}
+
+.topologyCountBadge {
+  fill: rgba(17, 17, 20, 0.88);
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1.2;
+}
+
+.topologyCountText {
+  fill: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-anchor: middle;
 }
 
 .logCard {
@@ -759,7 +867,10 @@
 
 @media (max-width: 1240px) {
   .columns {
-    grid-template-columns: 272px minmax(0, 1fr) 292px;
+    grid-template-columns:
+      clamp(208px, 24vw, 248px)
+      minmax(0, 1.5fr)
+      clamp(224px, 26vw, 284px);
   }
 
   .metricsGrid {
@@ -781,6 +892,7 @@
   }
 
   .centerStage {
-    min-height: 540px;
+    grid-template-rows: minmax(340px, 1.25fr) minmax(240px, 1fr);
+    min-height: 660px;
   }
 }

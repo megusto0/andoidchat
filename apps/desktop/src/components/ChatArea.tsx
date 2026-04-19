@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "../types";
 import { useAutoScroll } from "../hooks/useAutoScroll";
+import { formatSimulationSender } from "../utils/simulationNames";
 import { MessageBubble } from "./MessageBubble";
 import s from "./ChatArea.module.css";
 
@@ -49,6 +50,7 @@ function renderMessages(
 
 function ChatAreaInner({ messages, ownName }: Props) {
   const previousLengthRef = useRef(0);
+  const simulationBodyRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, showScrollButton, scrollToBottom } =
     useAutoScroll(messages.length);
   const [simulationCollapsed, setSimulationCollapsed] = useState(true);
@@ -79,6 +81,19 @@ function ChatAreaInner({ messages, ownName }: Props) {
       setSimulationCollapsed(true);
     }
   }, [simulationMessages.length]);
+
+  useEffect(() => {
+    if (simulationCollapsed) {
+      return;
+    }
+
+    const body = simulationBodyRef.current;
+    if (!body) {
+      return;
+    }
+
+    body.scrollTop = body.scrollHeight;
+  }, [simulationCollapsed, simulationMessages.length]);
 
   const renderedMessages = useMemo(
     () => renderMessages(regularMessages, ownName, !isBulkRestore),
@@ -129,7 +144,11 @@ function ChatAreaInner({ messages, ownName }: Props) {
                   <div className={s.simulationToggleMeta}>
                     {latestSimulation ? (
                       <span className={s.simulationToggleSummary}>
-                        {latestSimulation.sender}: {latestSimulation.text}
+                        {formatSimulationSender(
+                          latestSimulation.sender,
+                          Boolean(latestSimulation.simulationId)
+                        )}
+                        : {latestSimulation.text}
                       </span>
                     ) : null}
                     <span className={s.simulationToggleAction}>
@@ -138,7 +157,9 @@ function ChatAreaInner({ messages, ownName }: Props) {
                   </div>
                 </button>
                 {!simulationCollapsed && (
-                  <div className={s.simulationBody}>{renderedSimulationMessages}</div>
+                  <div className={s.simulationBody} ref={simulationBodyRef}>
+                    {renderedSimulationMessages}
+                  </div>
                 )}
               </section>
             )}
