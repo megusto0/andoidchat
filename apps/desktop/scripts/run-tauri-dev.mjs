@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { forwardSignalsToChild, spawnCommand } from "./spawn-command.mjs";
 
@@ -91,6 +92,30 @@ function fail(lines) {
   process.exit(1);
 }
 
+function stopWindowsReleaseExe(projectDir) {
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  const releaseExe = path.join(projectDir, "src-tauri", "target", "release", "tcp-messenger.exe");
+  if (!existsSync(releaseExe)) {
+    return;
+  }
+
+  const taskkill = spawnSync("taskkill", ["/f", "/im", "tcp-messenger.exe"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+
+  // taskkill exits non-zero when the process is not running; only fail on unexpected launch errors.
+  if (taskkill.error && taskkill.error.code !== "ENOENT") {
+    fail([
+      "Failed to stop the previous desktop release build before packaging.",
+      `Close tcp-messenger.exe and try again. ${taskkill.error.message}`,
+    ]);
+  }
+}
+
 const rawArgs = process.argv.slice(2);
 const checkOnly = rawArgs.includes("--check");
 const filteredArgs = rawArgs.filter((arg) => arg !== "--check");
@@ -141,6 +166,10 @@ if (addedCargoPath) {
 if (checkOnly) {
   console.log("Desktop preflight OK.");
   process.exit(0);
+}
+
+if (requestedCommand === "build") {
+  stopWindowsReleaseExe(projectDir);
 }
 
 const child = spawnCommand(tauriBin, [requestedCommand, ...tauriArgs], {

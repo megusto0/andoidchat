@@ -10,6 +10,14 @@ interface Props {
   ownName: string;
 }
 
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function formatTime(timestamp: Date): string {
+  return `${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}`;
+}
+
 function isGroupable(type: string): boolean {
   return type === "own" || type === "other";
 }
@@ -101,8 +109,22 @@ function ChatAreaInner({ messages, ownName }: Props) {
   );
 
   const renderedSimulationMessages = useMemo(
-    () => renderMessages(simulationMessages, ownName, !isBulkRestore),
-    [isBulkRestore, ownName, simulationMessages]
+    () =>
+      simulationMessages.map((message) => (
+        <div className={s.simulationFeedRow} key={message.id}>
+          <span className={s.simulationFeedTime}>
+            {formatTime(message.timestamp)}
+          </span>
+          <span className={s.simulationFeedSender}>
+            {formatSimulationSender(
+              message.sender,
+              Boolean(message.simulationId)
+            )}
+          </span>
+          <span className={s.simulationFeedText}>{message.text}</span>
+        </div>
+      )),
+    [simulationMessages]
   );
 
   const latestSimulation = simulationMessages[simulationMessages.length - 1];
@@ -157,7 +179,13 @@ function ChatAreaInner({ messages, ownName }: Props) {
                   </div>
                 </button>
                 {!simulationCollapsed && (
-                  <div className={s.simulationBody} ref={simulationBodyRef}>
+                  <div
+                    className={s.simulationBody}
+                    ref={simulationBodyRef}
+                    role="log"
+                    aria-label="Сообщения симуляции"
+                    onWheel={(event) => event.stopPropagation()}
+                  >
                     {renderedSimulationMessages}
                   </div>
                 )}

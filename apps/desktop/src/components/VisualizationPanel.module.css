@@ -17,9 +17,9 @@
   min-height: 0;
   display: grid;
   grid-template-columns:
-    clamp(220px, 23vw, 276px)
-    minmax(0, 1.65fr)
-    clamp(240px, 25vw, 312px);
+    clamp(200px, 20vw, 244px)
+    minmax(0, 1.95fr)
+    clamp(220px, 22vw, 272px);
 }
 
 .leftRail,
@@ -51,7 +51,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(360px, 1.55fr) minmax(240px, 1fr);
+  grid-template-rows: minmax(440px, 1.9fr) minmax(220px, 1fr);
   background: var(--bg-primary);
 }
 
@@ -390,8 +390,8 @@
 .topologyStage {
   flex: 1;
   min-height: 0;
-  min-height: 320px;
-  padding: 6px 20px 22px;
+  min-height: 400px;
+  padding: 0 10px 16px;
   background:
     radial-gradient(circle at 50% 42%, rgba(199, 168, 138, 0.10), transparent 34%),
     radial-gradient(circle at 50% 50%, rgba(122, 167, 232, 0.05), transparent 58%),
@@ -531,7 +531,7 @@
 
 .topologyLabel {
   fill: var(--text-primary);
-  font-size: 9px;
+  font-size: 10px;
   text-anchor: middle;
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
@@ -868,9 +868,9 @@
 @media (max-width: 1240px) {
   .columns {
     grid-template-columns:
-      clamp(208px, 24vw, 248px)
-      minmax(0, 1.5fr)
-      clamp(224px, 26vw, 284px);
+      clamp(192px, 22vw, 224px)
+      minmax(0, 1.75fr)
+      clamp(208px, 24vw, 252px);
   }
 
   .metricsGrid {
@@ -892,7 +892,7 @@
   }
 
   .centerStage {
-    grid-template-rows: minmax(340px, 1.25fr) minmax(240px, 1fr);
-    min-height: 660px;
+    grid-template-rows: minmax(380px, 1.35fr) minmax(220px, 1fr);
+    min-height: 640px;
   }
 }
