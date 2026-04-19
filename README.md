@@ -49,6 +49,12 @@ Build the desktop frontend only:
 npm run desktop:build
 ```
 
+Build the desktop release bundle from the monorepo root:
+
+```bash
+npm run desktop:exe
+```
+
 Build the Android client:
 
 ```bash
@@ -58,6 +64,7 @@ npm run android:build
 ## Desktop Notes
 
 - The desktop launcher uses the local `apps/desktop/node_modules` binaries instead of `npx`, so run `npm run desktop:install` first.
+- To produce a Windows `.exe`, run `npm run desktop:exe` from the repository root after installing desktop dependencies.
 - Tauri desktop builds require Rust. If Rust was installed with rustup in the default Windows location, `desktop:doctor` and `desktop:tauri` will add `%USERPROFILE%\.cargo\bin` to `PATH` for that run.
 - If `desktop:doctor` still reports that `cargo` is missing, reopen the terminal after installing Rust and try again.
 - Windows builds need both `apps/desktop/src-tauri/icons/icon.png` and `apps/desktop/src-tauri/icons/icon.ico`. Keep both files when replacing the app icon.

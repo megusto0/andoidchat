@@ -93,7 +93,13 @@ function fail(lines) {
 
 const rawArgs = process.argv.slice(2);
 const checkOnly = rawArgs.includes("--check");
-const tauriArgs = rawArgs.filter((arg) => arg !== "--check");
+const filteredArgs = rawArgs.filter((arg) => arg !== "--check");
+const requestedCommand =
+  filteredArgs[0] === "dev" || filteredArgs[0] === "build"
+    ? filteredArgs[0]
+    : "dev";
+const tauriArgs =
+  filteredArgs[0] === requestedCommand ? filteredArgs.slice(1) : filteredArgs;
 
 const tauriBin = getLocalBin("tauri");
 const viteBin = getLocalBin("vite");
@@ -137,7 +143,7 @@ if (checkOnly) {
   process.exit(0);
 }
 
-const child = spawnCommand(tauriBin, ["dev", ...tauriArgs], {
+const child = spawnCommand(tauriBin, [requestedCommand, ...tauriArgs], {
   cwd: projectDir,
   env,
   stdio: "inherit",
